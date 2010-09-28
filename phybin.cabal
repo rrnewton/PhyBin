@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.1.1
+Version:        0.1.2
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -19,7 +19,7 @@ Cabal-Version: >=1.6
 build-type: Simple
 
 source-repository head
-  type:     mercurial
+  type:     darcs
   location: http://code.haskell.org/phybin/repo/
 
 Executable phybin

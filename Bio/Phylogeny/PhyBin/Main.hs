@@ -53,7 +53,7 @@ import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 import Debug.Trace
 
-phybin_version = "0.1.1" -- NOTE: Remember to keep me in sync with the .cabal file
+phybin_version = "0.1.2" -- NOTE: Remember to keep me in sync with the .cabal file
 
 ----------------------------------------------------------------------------------------------------
 -- Type definitions
