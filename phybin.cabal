@@ -1,0 +1,44 @@
+Name:           phybin
+Version:        0.1.1
+License: BSD3
+License-file:   LICENSE
+Stability: Beta
+Author:			Ryan Newton <rrnewton@gmail.com>
+Maintainer:		Ryan Newton <rrnewton@gmail.com>
+homepage: http://code.haskell.org/phybin
+Copyright: Copyright (c) 2010 Ryan Newton
+Synopsis: Utility for binning phylogenetic trees in Newick format.
+Description: 
+   Classifies (bins) input Newick trees by topology, creating output files that 
+   characterize the size and contents of each bin (including
+   generating GraphViz-based visual representations of the tree topologies).
+
+Category: Bioinformatics
+Cabal-Version: >=1.6
+
+build-type: Simple
+
+source-repository head
+  type:     mercurial
+  location: http://code.haskell.org/phybin/repo/
+
+Executable phybin
+  Main-is:           Bio/Phylogeny/PhyBin/Main.hs
+  Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
+                     stringtable-atom, filepath, graphviz, prettyclass, fgl,
+                     HSH, HUnit, bytestring, 
+-- For bytestring.lazy support:
+                     parsec >= 3.1.0 
+--                   deepseq,
+--  extensions: CPP
+  extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances
+  GHC-Options: -O2 
+--  GHC-Options: -O2 -threaded 
+
+-- Doesn't work for an executable?
+--  extra-source-files: README.txt
+
+-- Oh, well this doesn't seem right but it achieves the effect for now:
+--  c-sources: README.txt
+--  includes: README.txt
+
