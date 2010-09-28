@@ -36,7 +36,7 @@ Downloading and Installing PhyBin
 
 The source code to PhyBin can be downloaded here:
 
-  * [Download Source Tarball](phybin-0.1.1.tar.gz)
+  * [Download Source Tarball](phybin-0.1.2.tar.gz)
 
 PhyBin is written in Haskell and if you have 
   [Haskell Platform](http://hackage.haskell.org/platform/).
@@ -47,8 +47,8 @@ installed you can install phybin with this one-liner:
 PhyBin is also available for download as a statically-linked
 executable for Mac-OS and Linux:
 
-  * [Download Mac-OS Binary](phybin-0.1.mac) 
-  * [Download Linux Binary](phybin-0.1.x86_64_linux)
+  * [Download Mac-OS Binary](phybin-0.1.2.mac) 
+  * [Download Linux Binary](phybin-0.1.2.x86_64_linux)
   
 It should be possible to build it for Windows, but I haven't done so
 yet.
