@@ -1,11 +1,14 @@
 Name:           phybin
-Version:        0.1.2
+Version:        0.1.2.1
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
 Author:			Ryan Newton <rrnewton@gmail.com>
 Maintainer:		Ryan Newton <rrnewton@gmail.com>
-homepage: http://code.haskell.org/phybin
+
+-- homepage: http://code.haskell.org/phybin
+homepage: http://people.csail.mit.edu/newton/phybin/
+
 Copyright: Copyright (c) 2010 Ryan Newton
 Synopsis: Utility for binning phylogenetic trees in Newick format.
 Description: 
@@ -19,8 +22,10 @@ Cabal-Version: >=1.6
 build-type: Simple
 
 source-repository head
-  type:     darcs
-  location: http://code.haskell.org/phybin/repo/
+  type:     git
+  location: https://github.com/rrnewton/PhyBin
+  -- type:     darcs
+  -- location: http://code.haskell.org/phybin/repo/
 
 Executable phybin
   Main-is:           Bio/Phylogeny/PhyBin/Main.hs

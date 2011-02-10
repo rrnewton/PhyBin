@@ -44,16 +44,16 @@ import qualified HSH
 
 -- For vizualization:
 import Data.Graph.Inductive as G  hiding (run) 
-import Data.GraphViz        as Gv hiding (Label) 
+import Data.GraphViz        as Gv hiding (Label, toLabel) 
 import qualified Data.Graph.Inductive as G 
-import qualified Data.GraphViz        as Gv
+import qualified Data.GraphViz        as Gv 
 --import Data.Graph.Inductive.Query.DFS
 
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 import Debug.Trace
 
-phybin_version = "0.1.2" -- NOTE: Remember to keep me in sync with the .cabal file
+phybin_version = "0.1.2.1" -- NOTE: Remember to keep me in sync with the .cabal file
 
 ----------------------------------------------------------------------------------------------------
 -- Type definitions
