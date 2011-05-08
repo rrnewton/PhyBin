@@ -204,7 +204,7 @@ branch = do s<-subtree; l<-len;
 	    return$ tag l s
 
 len :: Parser Double
-len = option 0.0 $ do char ':'; number
+len = option 0.0 $ do char ':'; (try sciNotation <|> number)
 
 number :: Parser Double
 number = 
@@ -212,6 +212,16 @@ number =
      fst <- many1 digit
      snd <- option "0" $ try$ do char '.'; many1 digit
      return (read (sign ++ fst++"."++snd) :: Double)
+
+sciNotation :: Parser Double
+sciNotation =
+  do coeff <- do fst <- many1 digit
+                 snd <- option "0" $ try$ do char '.'; many1 digit
+                 return $ fst++"."++snd
+     char 'e'
+     sign  <- option "" $ string "-"
+     expon <- many1 digit
+     return (read (coeff++"e"++sign++expon))
 
 name :: Parser String
 name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
