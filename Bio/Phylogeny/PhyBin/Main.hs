@@ -15,6 +15,7 @@ import Data.Function
 import Data.List
 import Data.Maybe
 import Data.Char
+import Data.Text.Lazy (pack)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -44,16 +45,33 @@ import qualified HSH
 
 -- For vizualization:
 import Data.Graph.Inductive as G  hiding (run) 
-import Data.GraphViz        as Gv hiding (Label, toLabel) 
+
+-- OLD: Label/toLabel were exported on graphviz ~2999.11:
+--import Data.GraphViz        as Gv hiding (Label, toLabel) 
+import Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.Graph.Inductive as G 
 import qualified Data.GraphViz        as Gv 
 --import Data.Graph.Inductive.Query.DFS
+-- import qualified Data.GraphViz.Attributes.Complete as Gattr
+-- import Data.GraphViz.Attributes.Complete
+--        (PortName, Label(RecordLabel,StrLabel), Shape, Attribute(Style,TailPort,ArrowHead,Len),
+--         StyleItem(SItem), StyleName(Filled), PortPos(LabelledPort),
+--         Shape, Color(X11Color), RecordField(PortName), PortName(PN,Color), CmopassPoint(South))
+
+import qualified Data.GraphViz.Attributes.Complete as Gattr
+import           Data.GraphViz.Attributes.Complete hiding (Label)
+
 
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 import Debug.Trace
 
 phybin_version = "0.1.2.1" -- NOTE: Remember to keep me in sync with the .cabal file
+
+
+-- TEMP / HACK:
+prettyPrint' :: Show a => a -> String
+prettyPrint' = show
 
 ----------------------------------------------------------------------------------------------------
 -- Type definitions
@@ -568,24 +586,26 @@ dotNewickTree title edge_scale tree =
     graphToDot myparams graph
  where 
   graph = toGraph2 tree
-  myparams :: GraphvizParams AnnotatedTree Double () AnnotatedTree
-  myparams = defaultParams { globalAttributes= [GraphAttrs [Gv.Label (StrLabel title)]],
+  myparams :: GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
+  myparams = defaultParams { globalAttributes= [GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
 			     fmtNode= nodeAttrs, fmtEdge= edgeAttrs }
   nodeAttrs :: (Int,AnnotatedTree) -> [Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
-    [ Gv.Label (StrLabel$ concat$ map fromLabel$ thd3$ get_dec node)
+    [ Gattr.Label$ StrLabel$ pack$ 
+      concat$ map fromLabel$ thd3$ get_dec node
     , Shape (if null children then {-PlainText-} Ellipse else PointShape)
     , Style [SItem Filled []]
     ]
 
   -- TOGGLE:
-  --  edgeAttrs (_,_,weight) = [ArrowHead noArrow, Len (weight * edge_scale + bump), Gv.Label (StrLabel$ show (weight))]
+  --  edgeAttrs (_,_,weight) = [ArrowHead noArrow, Len (weight * edge_scale + bump), Gattr.Label (StrLabel$ show (weight))]
   edgeAttrs (_,_,weight) = 
                            let draw_weight = compute_draw_weight weight edge_scale in
                            --trace ("EDGE WEIGHT "++ show weight ++ " drawn at "++ show draw_weight) $
-			   [ArrowHead noArrow, Gv.Label (StrLabel$ myShowFloat weight)] ++ -- TEMPTOGGLE
-			   --[ArrowHead noArrow, Gv.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
+			   [ArrowHead noArrow,
+                            Gattr.Label$ StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
+			   --[ArrowHead noArrow, Gattr.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
 			    if weight == 0.0
 			    then [Color [X11Color Red], Len minlen]
 			    else [Len draw_weight]
@@ -602,17 +622,17 @@ dotNewickTree_debug :: String -> AnnotatedTree -> DotGraph G.Node
 dotNewickTree_debug title tree = graphToDot myparams graph
  where 
   graph = toGraph2 tree
-  myparams :: GraphvizParams AnnotatedTree Double () AnnotatedTree
-  myparams = defaultParams { globalAttributes= [GraphAttrs [Gv.Label (StrLabel title)]],
+  myparams :: GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
+  myparams = defaultParams { globalAttributes= [GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
 			     fmtNode= nodeAttrs, fmtEdge= edgeAttrs }
   nodeAttrs :: (Int,AnnotatedTree) -> [Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
-    [ Gv.Label (if null children 
-  	        then StrLabel$ concat$ map fromLabel$ thd3$ get_dec node
+    [ Gattr.Label (if null children 
+  	        then StrLabel$ pack$ concat$ map fromLabel$ thd3$ get_dec node
 	        else RecordLabel$ take (length children) $ 
                                   -- This will leave interior nodes unlabeled:
-	                          map (PortName . PN) $ map show [1..]
+	                          map (PortName . PN . pack) $ map show [1..]
 		                  -- This version gives some kind of name to interior nodes:
 --	                          map (\ (i,ls) -> LabelledTarget (PN$ show i) (fromLabel$ head ls)) $ 
 --                                       zip [1..] (map (thd3 . get_dec) children)
@@ -625,7 +645,7 @@ dotNewickTree_debug title tree = graphToDot myparams graph
     let node1 = fromJust$ lab graph num1 
 	node2 = fromJust$ lab graph num2 	
 	ind = fromJust$ elemIndex node2 (get_children node1)
-    in [TailPort$ LabelledPort (PN$ show$ 1+ind) (Just South)]
+    in [TailPort$ LabelledPort (PN$ pack$ show$ 1+ind) (Just South)]
 
 
 
