@@ -2,7 +2,15 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
-module Bio.Phylogeny.PhyBin where
+module Bio.Phylogeny.PhyBin
+       (
+         NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, 
+         driver, parseNewick,
+         binthem, normalize, name_hack, annotateWLabLists, map_labels, map_dec, set_dec,     
+         drawNewickTree, dotNewickTree_debug, toLabel, fromLabel,
+         run_tests
+       )
+       where
 
 import           Text.Printf
 import           Text.Parsec
@@ -63,8 +71,8 @@ prettyPrint' = show
 
 type BranchLen = Double
 
--- Even though the Newick format allows it, ignoring interior node
--- labels. (They are not commonly used.)
+-- | Even though the Newick format allows it, here we ignore interior node
+--   labels. (They are not commonly used.)
 data NewickTree a = 
    NTLeaf     a Label
  | NTInterior a [NewickTree a]
@@ -169,44 +177,50 @@ maybeInsert fn (Just x) ls = insertBy fn x ls
 -- Newick file format parser definitions:
 ----------------------------------------------------------------------------------------------------
 
+-- | The default decorator for NewickTrees:
+type DefDecor = (Maybe (), BranchLen)
+
 tag l s =
   case s of 
     NTLeaf _ n      -> NTLeaf l n
     NTInterior _ ls -> NTInterior l ls
 
--- This parser ASSUMES that whitespace has been prefiltered from the input.
-newick_parser :: Parser (NewickTree BranchLen)
+-- | This parser ASSUMES that whitespace has been prefiltered from the input.
+newick_parser :: Parser (NewickTree DefDecor)
 newick_parser = 
    do x <- subtree
       l<-len
       char ';'
       return$ tag l x
 
-subtree :: Parser (NewickTree BranchLen)
+subtree :: Parser (NewickTree DefDecor)
 subtree = internal <|> leaf
 
-leaf :: Parser (NewickTree BranchLen)
-leaf = do n<-name; return$ NTLeaf 0.0 (toLabel n)
+leaf :: Parser (NewickTree DefDecor)
+leaf = do n<-name; return$ NTLeaf (Nothing,0.0) (toLabel n)
 
-internal :: Parser (NewickTree BranchLen)
+internal :: Parser (NewickTree DefDecor)
 internal = do char '('       
 	      bs <- branchset
 	      char ')'       
               nm <- name -- IGNORED
-              return$ NTInterior 0.0 bs
+              return$ NTInterior (Nothing,0.0) bs
 
-branchset :: Parser [NewickTree BranchLen]
+branchset :: Parser [NewickTree DefDecor]
 branchset =
     do b <- branch <?> "at least one branch"
        rest <- option [] $ try$ do char ','; branchset
        return (b:rest)
 
-branch :: Parser (NewickTree BranchLen)
+branch :: Parser (NewickTree DefDecor)
 branch = do s<-subtree; l<-len; 
 	    return$ tag l s
 
-len :: Parser Double
-len = option 0.0 $ do char ':'; (try sciNotation <|> number)
+-- If the length is omitted, it is implicitly zero.
+-- len :: Parser Double
+len :: Parser DefDecor            
+len = do num <- option 0.0 $ do char ':'; (try sciNotation <|> number)
+         return (Nothing,num)
 
 number :: Parser Double
 number = 
@@ -250,10 +264,11 @@ name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 type AnnotatedTree = NewickTree (BranchLen, Int, [Label])
 
 
-annotateWLabLists :: NewickTree BranchLen -> AnnotatedTree
+-- annotateWLabLists :: NewickTree BranchLen -> AnnotatedTree
+annotateWLabLists :: NewickTree DefDecor -> AnnotatedTree
 annotateWLabLists tr = case tr of 
-  NTLeaf bl n      -> NTLeaf (bl,1,[n]) n
-  NTInterior bl ls -> 
+  NTLeaf (_,bl) n      -> NTLeaf (bl,1,[n]) n
+  NTInterior (_,bl) ls -> 
       let children = map annotateWLabLists ls in 
       NTInterior (bl,      sum $ map get_weight children,
 		  foldl1 merge $ map get_label_list   children)
@@ -263,8 +278,14 @@ instance Functor NewickTree where
    fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
    fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
 
+-- | Apply a function to all the *labels* (leaf names) in a tree.
 map_labels fn (NTLeaf     dec lab) = NTLeaf dec $ fn lab
 map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
+
+-- | Apply a function to all the decorations in a tre.
+map_dec :: (d1 -> d2) -> NewickTree d1 -> NewickTree d2
+map_dec fn (NTLeaf     dec lab) = NTLeaf (fn dec) lab
+map_dec fn (NTInterior dec ls)  = NTInterior (fn dec) $ map (map_dec fn) ls
 
 all_labels (NTLeaf     _ lab) = [lab]
 all_labels (NTInterior _ ls)  = concat$ map all_labels ls
@@ -452,7 +473,7 @@ type BinResults = M.Map AnnotatedTree BinEntry
 
 -- Takes labeled trees, classifies labels into equivalence classes.
 --binthem :: [(String, NewickTree BranchLen)] -> M.Map (NewickTree ()) BinEntry
-binthem :: [(String, NewickTree BranchLen)] -> BinResults
+binthem :: [(String, NewickTree DefDecor)] -> BinResults
 binthem ls = binthem_normed normalized
  where
   normalized = map (\ (lab,tree) -> (lab, normalize $ annotateWLabLists tree)) ls
@@ -637,7 +658,10 @@ dotNewickTree_debug title tree = graphToDot myparams graph
 -- Utilities and UNIT TESTING
 ----------------------------------------------------------------------------------------------------
 
-parseNewick :: String -> B.ByteString -> NewickTree BranchLen
+-- | Parse a bytestring into a NewickTree with branch lengths.  The
+--   first argument is file from which the data came and is just for
+--   error error messages.
+parseNewick :: String -> B.ByteString -> NewickTree DefDecor
 parseNewick file input = 
   runB file newick_parser $
   B.filter (not . isSpace) input
@@ -670,7 +694,7 @@ norm = normalize . annotateWLabLists . run newick_parser
 norm2 = normalize . annotateWLabLists . parseNewick "test"
 tests = 
   let 
-      ntl s = NTLeaf 0.0 (toLabel s)
+      ntl s = NTLeaf (Nothing,0.0) (toLabel s)
   in 
   test 
    [ "test name"   ~: "foo" ~=?  run name "foo"
@@ -684,9 +708,10 @@ tests =
    -- These are not allowed:
    , "null branchset" ~: errortest$ run branchset ""
 
-   , "internal" ~: NTInterior 0.0 [ntl "A"] ~=?  run internal "(A);"
+   , "internal" ~: NTInterior (Nothing,0.0) [ntl "A"] ~=?  run internal "(A);"
 
-   , "example: no nodes are named"  ~: NTInterior 0 [ntl "", ntl "",NTInterior 0 [ntl "", ntl ""]]
+   , "example: no nodes are named"  ~: NTInterior (Nothing,0)
+                                         [ntl "", ntl "", NTInterior (Nothing,0) [ntl "", ntl ""]]
 				   ~=? run newick_parser "(,,(,));"
    , "example: leaf nodes are named" ~: 6 ~=?  cnt (run newick_parser "(A,B,(C,D));")
    , "example: all nodes are named"  ~: 6 ~=?  cnt (run newick_parser "(A,B,(C,D)E)F;")

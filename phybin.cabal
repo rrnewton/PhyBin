@@ -46,7 +46,7 @@ Executable phybin
                      parsec >= 3.1.0 
 --                   deepseq,
 --  extensions: CPP
-  extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances
+--   extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances
   GHC-Options: -O2 
 --  GHC-Options: -O2 -threaded 
 

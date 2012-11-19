@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Main where
@@ -18,6 +19,11 @@ import           System.Exit
 
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Bio.Phylogeny.PhyBin
+         (NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, 
+          driver, parseNewick,
+          binthem, normalize, name_hack, annotateWLabLists, map_labels, map_dec, set_dec,
+          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel,
+          run_tests)
 import Version
 
 ----------------------------------------------------------------------------------------------------
@@ -205,12 +211,12 @@ main_test =
 
 --a :: AnnotatedTree
 -- annotateWLabLists$ 
-a :: NewickTree Double
-a = set_dec 1 $ 
+a :: NewickTree DefDecor
+a = set_dec (Nothing,1) $ 
     NTInterior () [NTInterior () [NTLeaf () "RE",NTInterior () [NTLeaf () "SD",NTLeaf () "SM"]],NTInterior () [NTLeaf () "BB",NTLeaf () "BJ"],NTInterior () [NTLeaf () "MB",NTLeaf () "ML"]]
 
-b :: NewickTree Double
-b = set_dec 1 $ 
+b :: NewickTree DefDecor
+b = set_dec (Nothing,1) $ 
     NTInterior () [NTInterior () [NTLeaf () "BB",NTLeaf () "BJ"],NTInterior () [NTLeaf () "MB",NTLeaf () "ML"],NTInterior () [NTLeaf () "RE",NTInterior () [NTLeaf () "SD",NTLeaf () "SM"]]]
 
 ls = [("a",a),("b",b)]
@@ -218,9 +224,13 @@ ls = [("a",a),("b",b)]
 -- This is one:
 num_binned = M.size $ binthem ls
 
-a_ =  ("980.dnd",NTInterior 0.0 [NTInterior 5.697e-2 [NTLeaf 3.95e-2 "SM",NTLeaf 5.977e-2 "SD"],NTLeaf 0.13143 "RE",NTInterior 0.13899 [NTInterior 9.019e-2 [NTLeaf 0.11856 "BB",NTLeaf 0.13592 "BJ"],NTInterior 0.13194 [NTLeaf 0.19456 "MB",NTLeaf 0.16603 "ML"]]])
+a_ = ("980.dnd",
+      map_dec (\x -> (Nothing,x)) $ 
+      NTInterior 0.0 [NTInterior 5.697e-2 [NTLeaf 3.95e-2 "SM",NTLeaf 5.977e-2 "SD"],NTLeaf 0.13143 "RE",NTInterior 0.13899 [NTInterior 9.019e-2 [NTLeaf 0.11856 "BB",NTLeaf 0.13592 "BJ"],NTInterior 0.13194 [NTLeaf 0.19456 "MB",NTLeaf 0.16603 "ML"]]])
 
-b_ = ("999.dnd",NTInterior 0.0 [NTInterior 6.527e-2 [NTInterior 0.13734 [NTLeaf 2.975e-2 "SM",NTLeaf 3.002e-2 "SD"],NTLeaf 0.18443 "RE"],NTInterior 6.621e-2 [NTLeaf 0.16184 "MB",NTLeaf 0.15233 "ML"],NTInterior 0.23143 [NTLeaf 9.192e-2 "BB",NTLeaf 0.10125 "BJ"]])
+b_ = ("999.dnd",
+      map_dec (\x -> (Nothing,x)) $ 
+      NTInterior 0.0 [NTInterior 6.527e-2 [NTInterior 0.13734 [NTLeaf 2.975e-2 "SM",NTLeaf 3.002e-2 "SD"],NTLeaf 0.18443 "RE"],NTInterior 6.621e-2 [NTLeaf 0.16184 "MB",NTLeaf 0.15233 "ML"],NTInterior 0.23143 [NTLeaf 9.192e-2 "BB",NTLeaf 0.10125 "BJ"]])
 
 -- But THIS is two:  ack!
 num2 = M.size $ binthem [a_,b_]
@@ -237,3 +247,10 @@ d2 = drawNewickTree "" b_norm
 
 d1_ = forkIO $ do runGraphvizCanvas Dot (dotNewickTree_debug "" a_norm) Xlib; return ()
 d2_ = forkIO $ do runGraphvizCanvas Dot (dotNewickTree_debug "" b_norm) Xlib; return ()
+
+
+-- | A of a tree with _____ weights attached to it:
+withWeights = "((((A8F330_:0.01131438136322714984,(G0GWK2_:0.00568050636963043226,(Q92FV4_:0.00284163304504484121,((B0BVQ5_:0.00319487112504297311,A8GU65_:0.00000122123005994819)74:0.00279881991324161267,(C3PM27_:0.00560787769333294297,C4K2Z0_:0.00559642713265556899)15:0.00000122123005994819)4:0.00000122123005994819)56:0.00276851661606284868)60:0.00283144414216590342)76:0.00886304965525876697,(A8GQC0_:0.05449879836105625541,(A8F0B2_:0.04736199885985507840,Q4UJN9_:0.02648399728559588939)64:0.00905997055810744446)28:0.00323255855543533657)29:0.02237505187863457132,(Q1RGK5_:0.00000122123005994819,A8GYD7_:0.00000122123005994819)100:0.28299884298270094884)100:0.05776841634437222123,(Q9ZC84_:0.00000122123005994819,D5AYH5_:0.00000122123005994819)99:0.00951976341375833368,Q68VM9_:0.04408933524904214141);"
+
+_ = NTInterior 0.0 [NTInterior 5.776841634437222e-2 [NTInterior 2.237505187863457e-2 [NTInterior 8.863049655258767e-3 [NTLeaf 1.131438136322715e-2 "A8F330_",NTInterior 2.8314441421659034e-3 [NTLeaf 5.680506369630432e-3 "G0GWK2_",NTInterior 2.7685166160628487e-3 [NTLeaf 2.841633045044841e-3 "Q92FV4_",NTInterior 1.22123005994819e-6 [NTInterior 2.7988199132416127e-3 [NTLeaf 3.194871125042973e-3 "B0BVQ5_",NTLeaf 1.22123005994819e-6 "A8GU65_"],NTInterior 1.22123005994819e-6 [NTLeaf 5.607877693332943e-3 "C3PM27_",NTLeaf 5.596427132655569e-3 "C4K2Z0_"]]]]],NTInterior 3.2325585554353366e-3 [NTLeaf 5.4498798361056255e-2 "A8GQC0_",NTInterior 9.059970558107444e-3 [NTLeaf 4.736199885985508e-2 "A8F0B2_",NTLeaf 2.648399728559589e-2 "Q4UJN9_"]]],NTInterior 0.28299884298270095 [NTLeaf 1.22123005994819e-6 "Q1RGK5_",NTLeaf 1.22123005994819e-6 "A8GYD7_"]],NTInterior 9.519763413758334e-3 [NTLeaf 1.22123005994819e-6 "Q9ZC84_",NTLeaf 1.22123005994819e-6 "D5AYH5_"],NTLeaf 4.408933524904214e-2 "Q68VM9_"]
+
