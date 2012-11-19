@@ -33,7 +33,8 @@ source-repository head
   -- location: http://code.haskell.org/phybin/repo/
 
 Executable phybin
-  Main-is:           Bio/Phylogeny/PhyBin/Main.hs
+  Main-is:           Main.hs
+--  Main-is:           Bio/Phylogeny/PhyBin/Main.hs  
   Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
                      stringtable-atom, filepath, 
 --                     graphviz == 2999.11.0.0,
