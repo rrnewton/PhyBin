@@ -1105,54 +1105,6 @@ usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
 defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
 
-main = 
-  do argv <- getArgs 
-
-     (opts,files) <- 
-       case getOpt Permute options argv of
-	 (o,n,[]  ) -> return (o,n)
-         (_,_,errs) -> defaultErr errs
-
-     let process_opt cfg opt = case opt of 
-	   NullOpt -> return cfg
-	   Verbose -> return cfg { verbose= True } 
-	   Version -> do putStrLn$ "phybin version "++phybin_version; exitSuccess
-
-	   SelfTest -> do run_tests; exitSuccess
-
-	   Output s -> return cfg { output_dir= s }
-
-	   NumTaxa n -> return cfg { num_taxa= n }
-	   Graph     -> return cfg { do_graph= True } 
-	   Draw	     -> return cfg { do_draw = True } 
-	   View      -> return cfg -- Handled below
-
-	   TabDelimited _ _ -> error "tabbed option not handled yet"
-	   Force            -> error "force option not handled yet"
-
-
-	   NameCutoff str -> let set = S.fromList str 
-				 new = toLabel . takeWhile (not . flip S.member set) . fromLabel
-			     in return cfg { name_hack = new . name_hack cfg }
-	   NamePrefix n   -> let new = toLabel . (take n) . fromLabel 
-			     in return cfg { name_hack = new . name_hack cfg }
-
-           -- This should always be after cutoff/prefix:
-	   NameTable file -> do reader <- name_table_reader file
-				return cfg { name_hack = reader . name_hack cfg }
-
-
-     config <- foldM process_opt default_phybin_config{ inputs=files } 
-	             (sort opts) -- NOTE: options processed in sorted order.
-
-     when (null files) $ do
-	defaultErr ["No file arguments!\n"]
-
-     if View `elem` opts 
-      then view_graphs config
-      --else driver config{ name_hack= name_hack_legionella }
-      else driver config
-
 view_graphs :: PhyBinConfig -> IO ()
 view_graphs PBC{..} = 
            do chans <- forM inputs $ \ file -> do 
