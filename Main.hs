@@ -16,13 +16,9 @@ import           System.Environment
 import           System.Console.GetOpt
 import           System.Exit
 
-
---------------------------------------------------------------------------------
-
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Bio.Phylogeny.PhyBin
-
-phybin_version = "0.1.2.1" -- NOTE: Remember to keep me in sync with the .cabal file
+import Version
 
 ----------------------------------------------------------------------------------------------------
 -- MAIN script: Read command line options and call the program.

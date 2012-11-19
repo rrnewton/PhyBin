@@ -32,7 +32,7 @@ import           Test.HUnit
 import qualified HSH 
 
 -- For vizualization:
-import            Data.Graph.Inductive as G  hiding (run)
+import           Data.Graph.Inductive as G  hiding (run)
 -- OLD: Label/toLabel were exported on graphviz ~2999.11:
 --import Data.GraphViz        as Gv hiding (Label, toLabel) 
 import           Data.GraphViz        as Gv hiding (parse, toLabel)
