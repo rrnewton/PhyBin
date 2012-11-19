@@ -89,18 +89,22 @@ instance NFData a => NFData (NewickTree a) where
 -}
 
 instance Pretty (NewickTree dec) where 
- pPrint (NTLeaf dec name)   = text (fromLabel name)
- pPrint (NTInterior dec ls) = 
+ pPrint (NTLeaf _ name)   = text (fromLabel name)
+ pPrint (NTInterior _ ls) = 
      --parens$ commasep ls
      (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
 
 
--- -- | Display a tree WITH the bootstrap and branch lengths.
--- displayTree :: NewickTree DefDecor -> Text
--- displayTree (NTLeaf dec name)   = text (fromLabel name)
--- displayTree (NTInterior dec ls) = 
---      --parens$ commasep ls
---      (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
+-- | Display a tree WITH the bootstrap and branch lengths.
+displayTree :: NewickTree DefDecor -> Doc
+displayTree (NTLeaf (Nothing,_) name)   = text (fromLabel name)
+displayTree (NTLeaf dec name)   = error "WEIRD -- why did a leaf node have a bootstrap value?"
+displayTree (NTInterior (bootstrap,_) ls) = 
+   case bootstrap of
+     Nothing -> base
+     Just val -> base <> text ":[" <> text (show val) <> text "]"
+ where
+   base = parens$ sep$ map_but_last (<>text",") $ map pPrint ls
 
 
 -- Experimental: toggle this to change the representation of labels:

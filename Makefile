@@ -77,8 +77,9 @@ legionella:
 	./phybin.exe $(LOCALSETS)/legionella/legionella_orthologs_aa/ -o $(LOCALSETS)/legionella/phybin_outputs/ -m ../datasets/legionella/name_table_hack_legionella.txt -s 0123456789 -n 4 -g
 
 
-
 # Newer ones [2012.11.19]:
+newbatch: rickettsia
+
 rickettsia: Rickettsia/renaming_table.txt
 	./phybin.exe -g -n 15 -m Rickettsia/renaming_table.txt -s '_' -v -o Rickettsia/phybin_output/ Rickettsia/final_trees/*BranchLab*.out 
 
