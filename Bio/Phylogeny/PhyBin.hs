@@ -6,7 +6,7 @@ module Bio.Phylogeny.PhyBin
        (
          NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, 
          driver, parseNewick,
-         binthem, normalize, name_hack, annotateWLabLists, map_labels, map_dec, set_dec,     
+         binthem, normalize, annotateWLabLists, map_labels, map_dec, set_dec,     
          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel,
          run_tests
        )
@@ -95,6 +95,14 @@ instance Pretty (NewickTree dec) where
      (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
 
 
+-- -- | Display a tree WITH the bootstrap and branch lengths.
+-- displayTree :: NewickTree DefDecor -> Text
+-- displayTree (NTLeaf dec name)   = text (fromLabel name)
+-- displayTree (NTInterior dec ls) = 
+--      --parens$ commasep ls
+--      (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
+
+
 -- Experimental: toggle this to change the representation of labels:
 ----------------------------------------
 --type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
@@ -177,8 +185,9 @@ maybeInsert fn (Just x) ls = insertBy fn x ls
 -- Newick file format parser definitions:
 ----------------------------------------------------------------------------------------------------
 
--- | The default decorator for NewickTrees:
-type DefDecor = (Maybe (), BranchLen)
+-- | The default decorator for NewickTrees contains BOOTSTRAP and BRANCHLENGTH.
+--   The bootstrap values, if present, will range in [0..100]
+type DefDecor = (Maybe Int, BranchLen)
 
 tag l s =
   case s of 
@@ -189,22 +198,25 @@ tag l s =
 newick_parser :: Parser (NewickTree DefDecor)
 newick_parser = 
    do x <- subtree
-      l<-len
+      -- Get the top-level metadata:
+      l <- branchMetadat
       char ';'
       return$ tag l x
 
 subtree :: Parser (NewickTree DefDecor)
 subtree = internal <|> leaf
 
+defaultMeta = (Nothing,0.0)
+
 leaf :: Parser (NewickTree DefDecor)
-leaf = do n<-name; return$ NTLeaf (Nothing,0.0) (toLabel n)
+leaf = do n<-name; return$ NTLeaf defaultMeta (toLabel n)
 
 internal :: Parser (NewickTree DefDecor)
 internal = do char '('       
 	      bs <- branchset
 	      char ')'       
               nm <- name -- IGNORED
-              return$ NTInterior (Nothing,0.0) bs
+              return$ NTInterior defaultMeta bs
 
 branchset :: Parser [NewickTree DefDecor]
 branchset =
@@ -213,15 +225,23 @@ branchset =
        return (b:rest)
 
 branch :: Parser (NewickTree DefDecor)
-branch = do s<-subtree; l<-len; 
+branch = do s<-subtree; l<-branchMetadat; 
 	    return$ tag l s
 
 -- If the length is omitted, it is implicitly zero.
--- len :: Parser Double
-len :: Parser DefDecor            
-len = do num <- option 0.0 $ do char ':'; (try sciNotation <|> number)
-         return (Nothing,num)
+branchMetadat :: Parser DefDecor    
+branchMetadat = option defaultMeta $ do
+    char ':'
+    n <- (try sciNotation <|> number)
+    -- IF the branch length succeeds then we go for the bracketed bootstrap value also:
+    bootstrap <- option Nothing $ do
+      char '['
+      s <- many1 digit
+      char ']'
+      return (Just (read s))
+    return (bootstrap,n)
 
+-- | Parse a normal, decimal number.
 number :: Parser Double
 number = 
   do sign <- option "" $ string "-"
@@ -229,6 +249,7 @@ number =
      snd <- option "0" $ try$ do char '.'; many1 digit
      return (read (sign ++ fst++"."++snd) :: Double)
 
+-- | Parse a number in scientific notation.
 sciNotation :: Parser Double
 sciNotation =
   do coeff <- do fst <- many1 digit
@@ -776,7 +797,7 @@ data PhyBinConfig =
 
 default_phybin_config = 
  PBC { verbose = False
-      , num_taxa = error "must be able to determine the number of taxa expected in the dataset"
+      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually.)"
       , name_hack = id -- Default, no transformation of leaf-labels
       , output_dir = "./"
       , inputs = []
@@ -900,7 +921,7 @@ driver PBC{..} =
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
 
-    putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):  "++ 
+    putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):\n"++ 
 	      show (sep $ map (text . fromLabel) $ S.toList taxa)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
