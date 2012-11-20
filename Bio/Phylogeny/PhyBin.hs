@@ -19,7 +19,7 @@ import           Text.Parsec.ByteString.Lazy
 import           Data.Function  (on)
 import           Data.List      (delete, minimumBy, sortBy, insertBy, intersperse,
                                  elemIndex, sort)
-import           Data.Maybe     (fromJust)
+import           Data.Maybe     (fromJust, fromMaybe)
 import           Data.Char      (isSpace)
 import           Data.Text.Lazy (pack)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -1030,28 +1030,64 @@ nonzero_blens node =
     else children + 1
 -}
 
+
 -- Come up with an average tree from a list of isomorphic trees.
 -- This comes up with some blending of edge lengths.
 avg_trees :: [AnnotatedTree] -> AnnotatedTree
-avg_trees ls = --summed -- TEMPTOGGLE
-    fmap (\ (StandardDecor blen bs w ls) ->
-            (StandardDecor (blen / count)
-                           ((round . (/ count) . fromIntegral) <$> bs)
-             w ls)) summed
+avg_trees ls = --summed -- TEMPTOGGLE -- show the sum/count directy...
+     fmap unlift $ 
+     foldIsomorphicTrees (foldl1 sumthem) $ 
+     map (fmap lift) ls     
+  where
+    totalCount = fromIntegral$ length ls
+
+    -- Here we do the actual averaging:
+    unlift :: TempDecor -> StandardDecor
+    unlift (bl, (bs, bootcount), wt, ls) =
+      (StandardDecor (bl / totalCount)
+                     (case bootcount of
+                        0 -> Nothing
+                        _ -> Just$ round (fromIntegral bs / fromIntegral bootcount))
+                     wt ls)
+      
+    lift :: StandardDecor -> TempDecor
+    lift (StandardDecor bl bs wt ls) = (bl, (fromMaybe 0 bs, countMayb bs), wt, ls)
+
+    sumthem :: TempDecor -> TempDecor -> TempDecor
+    sumthem (bl1, (bs1, cnt1), wt, ls)
+            (bl2, (bs2, cnt2), _,  _) =
+            (bl1+bl2, (bs1 + bs2, cnt1+cnt2), wt, ls)
+    countMayb Nothing  = 0
+    countMayb (Just _) = 1
+
+
+-- Used only by avg_trees above...
+type TempDecor = (Double, (Int, Int), Int, [Label])
+
+
+-- | This function allows one to collapse multiple trees while looking
+-- only at the "horizontal slice" of all the annotations *at a given
+-- position* in the tree.
+--
+-- "Isomorphic" must apply both to the shape and the name labels or it
+-- is an error to apply this function.
+foldIsomorphicTrees :: ([a] -> b) -> [NewickTree a] -> NewickTree b
+foldIsomorphicTrees _ [] = error "foldIsomorphicTrees: empty list of input trees"
+foldIsomorphicTrees fn ls@(hd:_)= undefined
  where
-  summed = foldl1 sum_2trees ls
-  count = fromIntegral$ length ls
-
-  sum_2trees a b = case (a,b) of
-    (NTLeaf (StandardDecor l1 bs1 w ls) nm,
-     NTLeaf (StandardDecor l2 bs2 _ _ ) _) ->
-     NTLeaf (StandardDecor (l1+l2) ((+) <$> bs1 <*> bs2) w ls) nm
-    (NTInterior (StandardDecor l1 bs1 w ls) ls1, 
-     NTInterior (StandardDecor l2 bs2 _ _ ) ls2) ->
-     NTInterior (StandardDecor (l1+l2) ((+) <$> bs1 <*> bs2) w ls) $ 
-       map (uncurry sum_2trees) $ zip ls1 ls2
-    _ -> error "avg_trees: applied to non-isomorphic trees"
-
+   -- Preserve the input order:
+   all = foldr consTrees (fmap (const []) hd) ls
+   -- We use the tree datatype itself as the intermediate data
+   -- structure.  This is VERY allocation-expensive, it would be
+   -- possible to trade compute for allocation here:
+   consTrees a b = case (a,b) of
+    (NTLeaf dec nm1, NTLeaf decls nm2) | nm1 /= nm2 -> error$"foldIsomorphicTrees: mismatched names: "++show (nm1,nm2)
+                                       | otherwise ->
+     NTLeaf (dec : decls) nm1
+    (NTInterior dec ls1, NTInterior decls ls2) ->
+     NTInterior (dec:decls) $ zipWith consTrees ls1 ls2
+    _ -> error "foldIsomorphicTrees: difference in tree shapes"
+    
 
 bump = 0.00001 -- for DIRTY HACKS
 
