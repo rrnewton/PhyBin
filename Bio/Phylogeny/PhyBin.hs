@@ -189,9 +189,12 @@ data BinEntry = BE {
 }
   deriving Show 
 
--- We index the results of binning by topology-only trees that have
--- their decorations removed.  (But we leave the weights on.)
-type BinResults = M.Map AnnotatedTree BinEntry
+-- | Ignore metadata (but keep weights) for the purpose of binning
+type StrippedTree = NewickTree Int
+
+-- | Index the results of binning by topology-only stripped trees
+--   that have their decorations removed.
+type BinResults = M.Map StrippedTree BinEntry
 
 -- | The binning function.
 --   Takes labeled trees, classifies labels into equivalence classes.
@@ -214,9 +217,9 @@ binthem_normed normalized =
  update new old = BE (members new ++ members old) (trees new ++ trees old)
  --strip = fmap (const ())
 
--- | For binning.  Remove branch lengths and labels but leave weights.
-anonymize_annotated :: AnnotatedTree -> AnnotatedTree
-anonymize_annotated = fmap (\ (StandardDecor bl bs w labs) -> (StandardDecor 0 Nothing w []))
+-- | For binning. Remove branch lengths and labels but leave weights.
+anonymize_annotated :: AnnotatedTree -> StrippedTree
+anonymize_annotated = fmap (\ (StandardDecor bl bs w labs) -> w)
 
 
 ----------------------------------------------------------------------------------------------------
