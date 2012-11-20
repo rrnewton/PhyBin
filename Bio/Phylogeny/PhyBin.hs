@@ -286,17 +286,25 @@ name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 --  (2) subtree weights for future use
 --      (defined as number of LEAVES, not counting intermediate nodes)
 --  (3) sorted lists of labels for symmetry breaking
-type AnnotatedTree = NewickTree (BranchLen, Int, [Label])
+type AnnotatedTree = NewickTree StandardDecor
 
+data StandardDecor = StandardDecor {
+  branchLen     :: BranchLen,
+  bootStrap     :: Maybe Int,
+  subtreeWeight :: Int,
+  sortedLabels  :: [Label]
+ }
+ deriving (Show,Read,Eq,Ord)
 
 -- annotateWLabLists :: NewickTree BranchLen -> AnnotatedTree
 annotateWLabLists :: NewickTree DefDecor -> AnnotatedTree
 annotateWLabLists tr = case tr of 
-  NTLeaf (_,bl) n      -> NTLeaf (bl,1,[n]) n
-  NTInterior (_,bl) ls -> 
+  NTLeaf (bs,bl) n      -> NTLeaf (StandardDecor bl bs 1 [n]) n
+  NTInterior (bs,bl) ls -> 
       let children = map annotateWLabLists ls in 
-      NTInterior (bl,      sum $ map get_weight children,
-		  foldl1 merge $ map get_label_list   children)
+      NTInterior (StandardDecor bl bs
+                  (sum $ map (subtreeWeight . get_dec) children)
+		  (foldl1 merge $ map (sortedLabels . get_dec) children))
 		 children
 
 instance Functor NewickTree where 
@@ -327,13 +335,14 @@ get_children (NTLeaf _ _) = []
 get_children (NTInterior _ ls) = ls
 
 -- Number of LEAVES contained in subtree:
-get_weight = snd3 . get_dec
+get_weight = subtreeWeight . get_dec
 
 -- Sorted list of leaf labels contained in subtree
-get_label_list   = thd3 . get_dec
+get_label_list   = sortedLabels . get_dec
 
-add_weight (l1,w1,sorted1) node  = 
-  let (_,w2,sorted2) = get_dec node in 
+
+add_weight (StandardDecor l1 bs1 w1 sorted1) node  = 
+  let (StandardDecor _ _ w2 sorted2) = get_dec node in 
   (l1, w1+w2, merge sorted1 sorted2)
 
 -- Remove the influence of one subtree from the metadata of another.
@@ -354,12 +363,12 @@ debug = False
 -- Our sorting criteria for the children of interior nodes:
 
 compare_childtrees node1 node2 = 
-    case get_weight node1 `compare` get_weight node2 of 
+    case (subtreeWeight $ get_dec node1) `compare` (subtreeWeight $ get_dec node2) of 
      -- Comparisons on atoms cause problems WRT to determinism between runs if parallelism is introduced.
      -- Can consider it an optimization for the serial case perhaps:
 --     EQ -> case map deAtom (get_label_list node1) `compare` 
 --	        map deAtom (get_label_list node2) of
-     EQ -> case get_label_list node1 `compare` get_label_list node2 of
+     EQ -> case (sortedLabels$ get_dec node1) `compare` (sortedLabels$ get_dec node2) of
             --EQ -> error "FIXME EQ"
             EQ -> error$ "Internal invariant broken.  These two children have equal ordering priority:\n" 
 		  ++ "Pretty printing:\n  "
@@ -390,10 +399,10 @@ normalize tree = snd$ loop tree Nothing
   --    3. the best candidate root anywhere under this subtree
   loop :: AnnotatedTree -> Maybe AnnotatedTree -> (AnnotatedTree, AnnotatedTree)
   loop node context  = case node of
-    NTLeaf dec@(l,w,sorted) name -> 
+    NTLeaf dec@(StandardDecor l _ w sorted) name -> 
 	(node, 
 	 -- If the leaf becomes the root... we could introduce another node:
-	 NTInterior (add_context (0,w,sorted) context) $
+	 NTInterior (add_context (StandardDecor 0 Nothing w sorted) context) $
 	            (verify_sorted "1" id$ maybeInsert compare_childtrees context [node])
 
 	 -- It may be reasonable to not support leaves becoming root.. that changes the number of nodes!
@@ -755,7 +764,7 @@ tests =
    , "annotateWLabLists" ~: 
      --NTInterior (0.0,[A,B,C,D]) [NTLeaf (0.1,[A]) A,NTLeaf (0.2,[B]) B,NTInterior (0.5,[C,D]) [NTLeaf (0.3,[C]) C,NTLeaf (0.4,[D]) D]]
         map toLabel ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
-    ~=? get_label_list (annotateWLabLists tr1)
+    ~=? sortedLabels$ get_dec (annotateWLabLists tr1)
 
    -- Make sure that all of these normalize to the same thing.
    , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(A,(C,D,E),B);")
@@ -852,8 +861,8 @@ driver PBC{..} =
     -- Next, parse the files and do error checking and annotation.
     --------------------------------------------------------------------------------
     --
-    -- results contains: num-nodes, parsed, warning-files
-    results <- forM files $ \ file -> 
+    -- results contains: num-nodes, parsed, warning-files   
+    results :: [(Int, [NewickTree DefDecor], [(Int, String)])] <- forM files $ \ file -> 
       do --stat <- getFileStatus file		 
 	 reg <- is_regular_file file
 	 if not reg then return (0,[],[(-1, file)]) else do
@@ -902,7 +911,7 @@ driver PBC{..} =
     let classes = --binthem_normed$ zip files $ concat$ map snd3 results
 	          binthem$  zip files $ concat$ map snd3 results
 	binlist = reverse $ sortBy (compare `on` fst3) $
-		  map (\ (tr,ls) -> (length (members ls), tr,ls)) $ M.toList classes
+		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
 	numbins = length binlist
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
 	warnings = concat $ map thd3 results
@@ -935,7 +944,10 @@ driver PBC{..} =
     forM_ (zip [1..] binlist) $ \ (i, (size, tr, bentry)) -> do
        --putStrLn$ ("  WRITING " ++ combine output_dir ("bin" ++ show i ++"_"++ show size ++".txt"))
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
-       writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
+       -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
+       -- Printing the average tree instead of the stripped cannonical one:
+       writeFile (base i size ++".tr")  (show (displayTree (avg_trees$ trees bentry)) ++ ";\n")
+
 --       writeFile (base i size ++".rawtree")  (show tr ++ ";\n") -- TempToggle
 
     when (not$ null warnings) $
