@@ -1,17 +1,19 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin.CoreTypes
        (
          NewickTree(..), displayDefaultTree,
-         DefDecor, StandardDecor(..),
+         DefDecor, StandardDecor(..), treeSize, numLeaves,
          get_dec, set_dec, get_children, avg_branchlen,
+         map_labels, all_labels, foldIsomorphicTrees,
          
          PhyBinConfig(..), default_phybin_config,
 
          toLabel, fromLabel, Label,
-       )       
+       )
        where
 
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
@@ -55,10 +57,13 @@ instance Functor NewickTree where
 
 
 -- Experimental: toggle this to change the representation of labels:
+-- Alas I always have problems with the interned string libs (e.g. segfaults)... [2012.11.20]
 ----------------------------------------
---type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
-----------------------------------------
+#if 0
+type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
+#else
 type Label = String; (toLabel, fromLabel) = (id, id)
+#endif
 ----------------------------------------
 fromLabel :: Label -> String
 toLabel   :: String -> Label
@@ -126,6 +131,16 @@ default_phybin_config =
 -- * Simple utility functions for the core types:
 ----------------------------------------------------------------------------------------------------
 
+-- | How many leaf nodes (leaves and interior) are contained in a NewickTree?
+treeSize :: NewickTree a -> Int
+treeSize (NTLeaf _ _) = 1
+treeSize (NTInterior _ ls) = 1 + sum (map treeSize ls)
+
+-- | This counts only leaf nodes.
+numLeaves :: NewickTree a -> Int
+numLeaves (NTLeaf _ _) = 1
+numLeaves (NTInterior _ ls) = sum (map numLeaves ls)
+
 -- | Display a tree WITH the bootstrap and branch lengths.
 displayDefaultTree :: NewickTree DefDecor -> Doc
 displayDefaultTree (NTLeaf (Nothing,_) name)   = text (fromLabel name)
@@ -170,3 +185,40 @@ avg_branchlen origls = fst total / snd total
    sum_tree (NTInterior (StandardDecor{branchLen}) ls) = 
        let (x,y) = sum_ls$ map sum_tree ls in
        if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)
+
+
+-- | Apply a function to all the *labels* (leaf names) in a tree.
+map_labels :: (Label -> Label) -> NewickTree a -> NewickTree a
+map_labels fn (NTLeaf     dec lbl) = NTLeaf dec $ fn lbl
+map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
+ 
+-- | Return all the labels contained in the tree.
+all_labels :: NewickTree t -> [Label]
+all_labels (NTLeaf     _ lbl) = [lbl]
+all_labels (NTInterior _ ls)  = concat$ map all_labels ls
+
+
+
+-- | This function allows one to collapse multiple trees while looking
+-- only at the "horizontal slice" of all the annotations *at a given
+-- position* in the tree.
+--
+-- "Isomorphic" must apply both to the shape and the name labels or it
+-- is an error to apply this function.
+foldIsomorphicTrees :: ([a] -> b) -> [NewickTree a] -> NewickTree b
+foldIsomorphicTrees _ [] = error "foldIsomorphicTrees: empty list of input trees"
+foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
+ where
+   -- Preserve the input order:
+   horiztrees = foldr consTrees (fmap (const []) hd) ls
+   -- We use the tree datatype itself as the intermediate data
+   -- structure.  This is VERY allocation-expensive, it would be
+   -- possible to trade compute for allocation here:
+   consTrees a b = case (a,b) of
+    (NTLeaf dec nm1, NTLeaf decls nm2) | nm1 /= nm2 -> error$"foldIsomorphicTrees: mismatched names: "++show (nm1,nm2)
+                                       | otherwise ->
+     NTLeaf (dec : decls) nm1
+    (NTInterior dec ls1, NTInterior decls ls2) ->
+     NTInterior (dec:decls) $ zipWith consTrees ls1 ls2
+    _ -> error "foldIsomorphicTrees: difference in tree shapes"
+

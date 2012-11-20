@@ -16,13 +16,9 @@ import           Test.HUnit            (runTestTT, Test, test)
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Bio.Phylogeny.PhyBin.CoreTypes 
         ( NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..),
-          toLabel, fromLabel, Label  ) 
-import Bio.Phylogeny.PhyBin 
-         ( driver, 
-           binthem, normalize, annotateWLabLists, map_labels, set_dec,
-           unitTests
-          )
-import Bio.Phylogeny.PhyBin.Parser (parseNewick)
+          toLabel, fromLabel, Label, set_dec, map_labels ) 
+import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists, unitTests)
+import Bio.Phylogeny.PhyBin.Parser    (parseNewick, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
 
 import Version
@@ -128,6 +124,7 @@ allUnitTests :: Test
 -- allUnitTests = unitTests ++
 allUnitTests = test 
   [ Bio.Phylogeny.PhyBin.unitTests
+  , Bio.Phylogeny.PhyBin.Parser.unitTests
   ]
 --  Bio.Phylogeny.PhyBin.Parser.unitTests
 

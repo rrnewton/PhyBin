@@ -4,15 +4,11 @@
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
+-- | This module contains the code that does the tree normalization and binning.
+--   It's the heart of the prgoram.
+
 module Bio.Phylogeny.PhyBin
-       (
---         NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, StandardDecor(..),
---         parseNewick,
-         driver, 
-         binthem, normalize, annotateWLabLists, map_labels, set_dec,     
---         toLabel, fromLabel, Label,
-         unitTests
-       )
+       ( driver, binthem, normalize, annotateWLabLists, unitTests )
        where
 
 import           Data.Function      (on)
@@ -37,83 +33,6 @@ import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
-
-
-----------------------------------------------------------------------------------------------------
--- OS specific bits:
-----------------------------------------------------------------------------------------------------
--- #ifdef WIN32
--- is_regular_file = undefined
--- is_directory path = 
---   getFileAttributes
--- --getFileInformationByHandle
--- --    bhfiFileAttributes
--- file_exists = undefined
--- #else
--- is_regular_file :: FilePath -> IO Bool
--- is_regular_file file = 
---   do stat <- getFileStatus file; 
---      -- Hmm, this is probably bad practice... hard to know its exhaustive:
---      return$ isRegularFile stat || isNamedPipe stat || isSymbolicLink stat
--- is_directory :: FilePath -> IO Bool
--- is_directory path = 
---   do stat <- getFileStatus path
---      return (isDirectory stat)
--- file_exists = fileExist
--- #endif
-
--- Here we ASSUME it exists, then these functions are good enough:
-is_regular_file :: FilePath -> IO Bool
-is_regular_file = doesFileExist
-
-is_directory :: FilePath -> IO Bool
-is_directory = doesDirectoryExist 
-
-file_exists :: FilePath -> IO Bool
-file_exists path = 
-  do f <- doesFileExist path
-     d <- doesDirectoryExist path
-     return (f || d)
-
-----------------------------------------------------------------------------------------------------
--- General helper/utility functions:
-----------------------------------------------------------------------------------------------------
-
-
-fst3 :: (t, t1, t2) -> t
-snd3 :: (t, t1, t2) -> t1
-thd3 :: (t, t1, t2) -> t2
-fst3 (a,_,_) = a
-snd3 (_,b,_) = b
-thd3 (_,_,c) = c
-
-
-merge :: Ord a => [a] -> [a] -> [a]
-merge [] ls = ls
-merge ls [] = ls
-merge l@(a:b) r@(x:y) = 
-  if a < x
-  then a : merge b r
-  else x : merge y l 
-
--- Set subtraction for sorted lists:
-demerge :: (Ord a, Show a) => [a] -> [a] -> [a]
-demerge ls [] = ls
-demerge [] ls = error$ "demerge: first list did not contain all of second, remaining: " ++ show ls
-demerge (a:b) r@(x:y) = 
-  case a `compare` x of
-   EQ -> demerge b y
-   LT -> a : demerge b r 
-   GT -> error$ "demerge: element was missing from first list: "++ show x
-
--- maybeCons :: Maybe a -> [a] -> [a]
--- maybeCons Nothing  ls = ls
--- maybeCons (Just x) ls = x : ls
-
-maybeInsert :: (a -> a -> Ordering) -> Maybe a -> [a] -> [a]
-maybeInsert _  Nothing  ls = ls
-maybeInsert fn (Just x) ls = insertBy fn x ls
-
 
 
 ----------------------------------------------------------------------------------------------------
@@ -147,21 +66,6 @@ annotateWLabLists tr = case tr of
 -- | Take the extra annotations away.  Inverse of `annotateWLabLists`.
 deAnnotate :: AnnotatedTree -> NewickTree DefDecor 
 deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
-
-
--- | Apply a function to all the *labels* (leaf names) in a tree.
-map_labels :: (Label -> Label) -> NewickTree a -> NewickTree a
-map_labels fn (NTLeaf     dec lbl) = NTLeaf dec $ fn lbl
-map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
-
--- -- | Apply a function to all the decorations in a tre.
--- map_dec :: (d1 -> d2) -> NewickTree d1 -> NewickTree d2
--- map_dec fn (NTLeaf     dec lab) = NTLeaf (fn dec) lab
--- map_dec fn (NTInterior dec ls)  = NTInterior (fn dec) $ map (map_dec fn) ls
-
-all_labels :: NewickTree t -> [Label]
-all_labels (NTLeaf     _ lbl) = [lbl]
-all_labels (NTInterior _ ls)  = concat$ map all_labels ls
 
 
 -- Number of LEAVES contained in subtree:
@@ -465,7 +369,7 @@ driver PBC{..} =
 	    else do 
 	     when verbose$ putStr "."
 
-	     num <- evaluate$ cnt parsed
+	     num <- evaluate$ treeSize parsed
 	     --num <- evaluate$ cnt normal
 
 	     hClose h
@@ -599,33 +503,9 @@ avg_trees origls =
     countMayb Nothing  = 0
     countMayb (Just _) = 1
 
-
 -- Used only by avg_trees above...
 type TempDecor = (Double, (Int, Int), Int, [Label])
 
-
--- | This function allows one to collapse multiple trees while looking
--- only at the "horizontal slice" of all the annotations *at a given
--- position* in the tree.
---
--- "Isomorphic" must apply both to the shape and the name labels or it
--- is an error to apply this function.
-foldIsomorphicTrees :: ([a] -> b) -> [NewickTree a] -> NewickTree b
-foldIsomorphicTrees _ [] = error "foldIsomorphicTrees: empty list of input trees"
-foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
- where
-   -- Preserve the input order:
-   horiztrees = foldr consTrees (fmap (const []) hd) ls
-   -- We use the tree datatype itself as the intermediate data
-   -- structure.  This is VERY allocation-expensive, it would be
-   -- possible to trade compute for allocation here:
-   consTrees a b = case (a,b) of
-    (NTLeaf dec nm1, NTLeaf decls nm2) | nm1 /= nm2 -> error$"foldIsomorphicTrees: mismatched names: "++show (nm1,nm2)
-                                       | otherwise ->
-     NTLeaf (dec : decls) nm1
-    (NTInterior dec ls1, NTInterior decls ls2) ->
-     NTInterior (dec:decls) $ zipWith consTrees ls1 ls2
-    _ -> error "foldIsomorphicTrees: difference in tree shapes"
     
 {- 
  ----------------------------------------
@@ -661,13 +541,84 @@ foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
 
 
 ----------------------------------------------------------------------------------------------------
--- Utilities and UNIT TESTING
+-- OS specific bits:
+----------------------------------------------------------------------------------------------------
+-- #ifdef WIN32
+-- is_regular_file = undefined
+-- is_directory path = 
+--   getFileAttributes
+-- --getFileInformationByHandle
+-- --    bhfiFileAttributes
+-- file_exists = undefined
+-- #else
+-- is_regular_file :: FilePath -> IO Bool
+-- is_regular_file file = 
+--   do stat <- getFileStatus file; 
+--      -- Hmm, this is probably bad practice... hard to know its exhaustive:
+--      return$ isRegularFile stat || isNamedPipe stat || isSymbolicLink stat
+-- is_directory :: FilePath -> IO Bool
+-- is_directory path = 
+--   do stat <- getFileStatus path
+--      return (isDirectory stat)
+-- file_exists = fileExist
+-- #endif
+
+-- Here we ASSUME it exists, then these functions are good enough:
+is_regular_file :: FilePath -> IO Bool
+is_regular_file = doesFileExist
+
+is_directory :: FilePath -> IO Bool
+is_directory = doesDirectoryExist 
+
+file_exists :: FilePath -> IO Bool
+file_exists path = 
+  do f <- doesFileExist path
+     d <- doesDirectoryExist path
+     return (f || d)
+
+----------------------------------------------------------------------------------------------------
+-- General helper/utility functions:
 ----------------------------------------------------------------------------------------------------
 
 
-cnt :: NewickTree a -> Int
-cnt (NTLeaf _ _) = 1
-cnt (NTInterior _ ls) = 1 + sum (map cnt ls)
+fst3 :: (t, t1, t2) -> t
+snd3 :: (t, t1, t2) -> t1
+thd3 :: (t, t1, t2) -> t2
+fst3 (a,_,_) = a
+snd3 (_,b,_) = b
+thd3 (_,_,c) = c
+
+
+merge :: Ord a => [a] -> [a] -> [a]
+merge [] ls = ls
+merge ls [] = ls
+merge l@(a:b) r@(x:y) = 
+  if a < x
+  then a : merge b r
+  else x : merge y l 
+
+-- Set subtraction for sorted lists:
+demerge :: (Ord a, Show a) => [a] -> [a] -> [a]
+demerge ls [] = ls
+demerge [] ls = error$ "demerge: first list did not contain all of second, remaining: " ++ show ls
+demerge (a:b) r@(x:y) = 
+  case a `compare` x of
+   EQ -> demerge b y
+   LT -> a : demerge b r 
+   GT -> error$ "demerge: element was missing from first list: "++ show x
+
+-- maybeCons :: Maybe a -> [a] -> [a]
+-- maybeCons Nothing  ls = ls
+-- maybeCons (Just x) ls = x : ls
+
+maybeInsert :: (a -> a -> Ordering) -> Maybe a -> [a] -> [a]
+maybeInsert _  Nothing  ls = ls
+maybeInsert fn (Just x) ls = insertBy fn x ls
+
+
+----------------------------------------------------------------------------------------------------
+-- UNIT TESTING
+----------------------------------------------------------------------------------------------------
 
 tre1 :: NewickTree DefDecor
 tre1 = parseNewick "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
@@ -716,7 +667,8 @@ unitTests =
              binthem [("one",   parseNewick "" "(A,(C,D,E),B);"),
  		      ("two",   parseNewick "" "((C,D,E),B,A);"),
 		      ("three", parseNewick "" "(D,E,C,(B,A));")])
-
+      
+   , "dotConversion" ~: True ~=? 100 < length (show $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
    ]
 
 --------------------------------------------------------------------------------
@@ -726,12 +678,6 @@ unitTests =
 -- runPr :: Show a => Parser a -> String -> IO ()
 -- runPr prs str = print (run prs str)
 
--- errortest :: t -> IO ()
--- errortest x = 
---    --() ~=?
---     handle (\ (e::SomeException) -> return ()) $ 
---       do evaluate x
---          assertFailure "test was expected to throw an error"
 
 -- commasep :: Pretty a => [a] -> Doc
 -- commasep ls = sep (intersperse (text ", ") $ map pPrint ls)

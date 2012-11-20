@@ -12,6 +12,8 @@ import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
 import qualified Data.Graph.Inductive as G  hiding (run)
 import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
+-- import           Test.HUnit          ((~:),(~=?),Test,test)
+
 import           Bio.Phylogeny.PhyBin.CoreTypes
 
 ----------------------------------------------------------------------------------------------------
@@ -180,7 +182,10 @@ dotNewickTree_debug title tree = Gv.graphToDot myparams graph
 -- tt2 = toGraph tt
 
 
---   , "dotConversion" ~: True ~=? 100 < length (prettyPrint' $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
+-- unitTests :: Test
+-- unitTests = test
+--    [ 
+--    ]
 
 
 type AnnotatedTree = NewickTree StandardDecor

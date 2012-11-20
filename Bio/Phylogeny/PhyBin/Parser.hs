@@ -1,15 +1,17 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin.Parser
-       (newick_parser, parseNewick)
+       (newick_parser, parseNewick, unitTests)
        where
+import           Control.Exception  (evaluate, handle, SomeException)
 import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Char          (isSpace)
 import           Text.Parsec
 import           Text.Parsec.ByteString.Lazy
-import           Test.HUnit         ()
-import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, toLabel)
+import           Test.HUnit          ((~:),(~=?),Test,test,assertFailure)
+import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, toLabel, treeSize)
 
 
 -- | Parse a bytestring into a NewickTree with branch lengths.  The
@@ -111,37 +113,46 @@ name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 -- Unit Tests
 --------------------------------------------------------------------------------
 
--- tests = test 
---    [ "test name"   ~: "foo" ~=?  run name "foo"
---    , "test number" ~:  3.3  ~=?  run number "3.3"
---    , "test number" ~:  3.0  ~=?  run number "3"
---    , "test number" ~:  -3.0 ~=?  run number "-3"
+tre1 :: NewickTree DefDecor
+tre1 = parseNewick "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
---    , "leaf"     ~: ntl "A" ~=?  run leaf    "A"
---    , "subtree"  ~: ntl "A" ~=?  run subtree "A"
+unitTests :: Test
+unitTests = test
+   [ "test name"   ~: "foo" ~=?  run name "foo"
+   , "test number" ~:  3.3  ~=?  run number "3.3"
+   , "test number" ~:  3.0  ~=?  run number "3"
+   , "test number" ~:  -3.0 ~=?  run number "-3"
 
---    -- These are not allowed:
---    , "null branchset" ~: errortest$ run branchset ""
+   , "leaf"     ~: ntl "A" ~=?  run leaf    "A"
+   , "subtree"  ~: ntl "A" ~=?  run subtree "A"
 
---    , "internal" ~: NTInterior (Nothing,0.0) [ntl "A"] ~=?  run internal "(A);"
---    ]
---  where
---    ntl s = NTLeaf (Nothing,0.0) (toLabel s)
+     -- These are not allowed:
+   , "null branchset" ~: errortest$ run branchset ""
+     
+   , "internal" ~: NTInterior (Nothing,0.0) [ntl "A"] ~=?  run internal "(A);"
+   , "example: no nodes are named"  ~: NTInterior (Nothing,0)
+                                         [ntl "", ntl "", NTInterior (Nothing,0) [ntl "", ntl ""]]
+        			   ~=? run newick_parser "(,,(,));"
+   , "example: leaf nodes are named" ~: 6 ~=?  treeSize (run newick_parser "(A,B,(C,D));")
+   , "example: all nodes are named"  ~: 6 ~=?  treeSize (run newick_parser "(A,B,(C,D)E)F;")
 
-
-   --   "example: no nodes are named"  ~: NTInterior (Nothing,0)
-   --                                       [ntl "", ntl "", NTInterior (Nothing,0) [ntl "", ntl ""]]
-   --      			   ~=? run newick_parser "(,,(,));"
-   -- , "example: leaf nodes are named" ~: 6 ~=?  cnt (run newick_parser "(A,B,(C,D));")
-   -- , "example: all nodes are named"  ~: 6 ~=?  cnt (run newick_parser "(A,B,(C,D)E)F;")
-
-   -- , "example: all but root node have a distance to parent"  ~: 6 ~=? cnt (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5);")
-   -- , "example: all have a distance to parent"              ~: 6 ~=? cnt (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5):0.6;")
-   -- , "example: distances and leaf names (popular)"         ~: 6 ~=? cnt tre1
-   -- , "example: distances and all names"                    ~: 6 ~=? cnt (run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;")
-   -- , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? cnt (run newick_parser "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
+   , "example: all but root node have a distance to parent"  ~: 6 ~=? treeSize (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5);")
+   , "example: all have a distance to parent"              ~: 6 ~=? treeSize (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5):0.6;")
+   , "example: distances and leaf names (popular)"         ~: 6 ~=? treeSize tre1
+   , "example: distances and all names"                    ~: 6 ~=? treeSize (run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;")
+   , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? treeSize (run newick_parser "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
+   ]
+ where
+  ntl s = NTLeaf (Nothing,0.0) (toLabel s)
 
 
 run :: Show a => Parser a -> String -> a
 run p input = runB "<unknown>" p (B.pack input)
+
+errortest :: t -> IO ()
+errortest x = 
+   --() ~=?
+    handle (\ (e::SomeException) -> return ()) $ 
+      do evaluate x
+         assertFailure "test was expected to throw an error"
               
