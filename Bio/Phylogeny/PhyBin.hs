@@ -897,7 +897,7 @@ driver PBC{..} =
     -- Do the actual binning:
     --------------------------------------------------------------------------------
 
-    putStrLn$ "Creating equivalence classes (bins), bin sizes:"
+    putStrLn$ "Creating equivalence classes (bins)..."
 
     let classes = --binthem_normed$ zip files $ concat$ map snd3 results
 	          binthem$  zip files $ concat$ map snd3 results
@@ -907,6 +907,8 @@ driver PBC{..} =
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
 	warnings = concat $ map thd3 results
 	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
+
+    putStrLn$ "  "++show numbins++" bins found.  Bin sizes, excluding singletons:"
 
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
@@ -923,7 +925,8 @@ driver PBC{..} =
 
     forM_ binlist $ \ (len, tr, _) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
-          putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
+          -- putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
+          putStrLn$ "  * members: "++ show len
 
     putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):\n"++ 
 	      show (sep $ map (text . fromLabel) $ S.toList taxa)
@@ -948,10 +951,10 @@ driver PBC{..} =
 				 else "Wrong number of taxa ("++ show n ++"): "++ file)
 				++"\n") 
 		           warnings))
-    putStrLn$ "Wrote contents of each bin to bin<N>_<binsize>.txt"
-    putStrLn$ "Wrote representative trees to bin<N>_<binsize>.tr"
-
+    putStrLn$ "[finished] Wrote contents of each bin to bin<N>_<binsize>.txt"
+    putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
     when (do_graph) $ do
+      putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
       forM_ (zip [1..] binlist) $ \ (i, (size, tr, bentry)) -> do
          let 
              dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
@@ -963,7 +966,7 @@ driver PBC{..} =
 	 when (size > 1 || numbins < 100) $ do 
 	   runGraphvizCommand default_cmd dot Pdf (base i size ++ ".pdf")
 	   return ()
-      putStrLn$ "Wrote visual representations of trees to bin<N>_<binsize>.pdf"
+      putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
 
     --putStrLn$ "Wrote representative tree to bin<N>_<binsize>.tr"
     putStrLn$ "Finished."

@@ -56,7 +56,8 @@ push:
 # Collecting shortcuts for running different datasets:
 
 
-LOCALSETS=~/newton_and_newton_local/datasets
+# LOCALSETS=~/newton_and_newton_local/datasets
+LOCALSETS=.
 
 rhizobia:
 	rm -rf $(LOCALSETS)/rhizobia/phybin_outputs
@@ -78,14 +79,28 @@ legionella:
 
 
 # Newer ones [2012.11.19]:
-newbatch: rickettsia
+newbatch: rickettsia rickettsiales wolbachia
 
-rickettsia: Rickettsia/renaming_table.txt
-	./phybin.exe -g -n 15 -m Rickettsia/renaming_table.txt -s '_' -v -o Rickettsia/phybin_output/ Rickettsia/final_trees/*BranchLab*.out 
+#--------------------------------------------------------------------------------
+rickettsia: $(LOCALSETS)/Rickettsia/renaming_table.txt
+	./phybin.exe -g -n 15 -m $(LOCALSETS)/Rickettsia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsia/phybin_output/ $(LOCALSETS)/Rickettsia/final_trees/*BranchLab*.out 
 
-Rickettsia/renaming_table.txt:
-	runghc stripTable.hs Rickettsia/Rickettsia_orthololgs.txt > Rickettsia/renaming_table.txt
-#	runghc stripTable.hs Rickettsia/Rickettsia_orthololgs.txt > /tmp/blah
+$(LOCALSETS)/Rickettsia/renaming_table.txt: $(LOCALSETS)/Rickettsia/Rickettsia_orthololgs.txt
+	runghc stripTable.hs $^ > $@
+
+#--------------------------------------------------------------------------------
+rickettsiales: $(LOCALSETS)/Rickettsiales/renaming_table.txt
+	./phybin.exe -g -n 29 -m $(LOCALSETS)/Rickettsiales/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsiales/phybin_output/ $(LOCALSETS)/Rickettsiales/final_trees/*BranchLab*.out 
+
+$(LOCALSETS)/Rickettsiales/renaming_table.txt: $(LOCALSETS)/Rickettsiales/Rickettsiales_orthologs.txt
+	runghc stripTable.hs $^ > $@
+
+#--------------------------------------------------------------------------------
+wolbachia: $(LOCALSETS)/Wolbachia/renaming_table.txt
+	./phybin.exe -g -n 4 -m $(LOCALSETS)/Wolbachia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Wolbachia/phybin_output/ $(LOCALSETS)/Wolbachia/final_trees/*BranchLab*.out 
+
+$(LOCALSETS)/Wolbachia/renaming_table.txt: $(LOCALSETS)/Wolbachia/Wolbachia_orthologs.txt
+	runghc stripTable.hs $^ > $@
 
 
 temp:
