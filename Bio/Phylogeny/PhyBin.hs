@@ -313,7 +313,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	       parsed = map_labels name_hack $ parseNewick file bstr
                pruned = case branch_collapse_thresh of 
                           Nothing  -> parsed
-                          Just thr -> collapseBranches thr parsed
+                          Just thr -> collapseBranches ((< thr) . snd) 
+                                         (error "FINISH THIS COLLAPSER") parsed
 	       annot  = annotateWLabLists pruned
 	       normal = normalize annot
 	       weight = get_weight annot
