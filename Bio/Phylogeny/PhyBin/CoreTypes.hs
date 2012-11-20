@@ -1,4 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
@@ -41,15 +42,34 @@ instance NFData a => NFData (NewickTree a) where
   rnf (NTInterior l ls) = rnf (l,ls)
 -}
 
-instance Pretty (NewickTree dec) where 
- pPrint (NTLeaf _ name)   = text (fromLabel name)
- pPrint (NTInterior _ ls) = 
-     --parens$ commasep ls
-     (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
-
 instance Functor NewickTree where 
    fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
    fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
+
+
+instance Pretty dec => Pretty (NewickTree dec) where 
+ -- pPrint (NTLeaf _ name)   = text (fromLabel name)
+ -- pPrint (NTInterior _ ls) = 
+ --     --parens$ commasep ls
+ --     (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
+
+ -- I'm using displayDefaultTree for the "prettiest" printing and
+ -- replacing pPrint with a whitespace-improved version of show:
+ pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (fromLabel name)
+ pPrint (NTInterior dec ls) = "NTInterior" <+> pPrint dec <+> pPrint ls
+
+
+-- | Display a tree WITH the bootstrap and branch lengths.
+displayDefaultTree :: NewickTree DefDecor -> Doc
+displayDefaultTree (NTLeaf (Nothing,_) name)   = text (fromLabel name)
+displayDefaultTree (NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
+displayDefaultTree (NTInterior (bootstrap,_) ls) = 
+   case bootstrap of
+     Nothing -> base
+     Just val -> base <> text ":[" <> text (show val) <> text "]"
+ where
+   base = parens$ sep$ map_but_last (<>text",") $ map pPrint ls
+
 
 ----------------------------------------------------------------------------------------------------
 -- Labels
@@ -99,6 +119,11 @@ data StandardDecor = StandardDecor {
  }
  deriving (Show,Read,Eq,Ord)
 
+instance Pretty StandardDecor where 
+ pPrint (StandardDecor bl bs wt ls) = parens$
+    "StandardDecor" <+> hsep [pPrint bl, pPrint bs
+--                             , pPrint wt, pPrint ls
+                             ]
 
 ----------------------------------------------------------------------------------------------------
 -- * Configuring and running the command line tool.
@@ -143,16 +168,6 @@ numLeaves :: NewickTree a -> Int
 numLeaves (NTLeaf _ _) = 1
 numLeaves (NTInterior _ ls) = sum (map numLeaves ls)
 
--- | Display a tree WITH the bootstrap and branch lengths.
-displayDefaultTree :: NewickTree DefDecor -> Doc
-displayDefaultTree (NTLeaf (Nothing,_) name)   = text (fromLabel name)
-displayDefaultTree (NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
-displayDefaultTree (NTInterior (bootstrap,_) ls) = 
-   case bootstrap of
-     Nothing -> base
-     Just val -> base <> text ":[" <> text (show val) <> text "]"
- where
-   base = parens$ sep$ map_but_last (<>text",") $ map pPrint ls
 
 map_but_last :: (a -> a) -> [a] -> [a]
 map_but_last _ [] = []

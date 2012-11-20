@@ -35,6 +35,9 @@ import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
 import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 
+-- Turn on for extra invariant checking:
+debug :: Bool
+debug = True
 
 ----------------------------------------------------------------------------------------------------
 -- Normal form for unordered, unrooted trees
@@ -52,56 +55,7 @@ import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNe
 -- A common type of tree is "AnnotatedTree", which contains the standard decorator.
 type AnnotatedTree = NewickTree StandardDecor
 
-
--- annotateWLabLists :: NewickTree BranchLen -> AnnotatedTree
-annotateWLabLists :: NewickTree DefDecor -> AnnotatedTree
-annotateWLabLists tr = case tr of 
-  NTLeaf (bs,bl) n      -> NTLeaf (StandardDecor bl bs 1 [n]) n
-  NTInterior (bs,bl) ls -> 
-      let children = map annotateWLabLists ls in 
-      NTInterior (StandardDecor bl bs
-                  (sum $ map (subtreeWeight . get_dec) children)
-		  (foldl1 merge $ map (sortedLabels . get_dec) children))
-		 children
-
--- | Take the extra annotations away.  Inverse of `annotateWLabLists`.
-deAnnotate :: AnnotatedTree -> NewickTree DefDecor 
-deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
-
-
--- Number of LEAVES contained in subtree:
-get_weight :: NewickTree StandardDecor -> Int
-get_weight = subtreeWeight . get_dec
-
--- Sorted list of leaf labels contained in subtree
-get_label_list :: NewickTree StandardDecor -> [Label]
-get_label_list   = sortedLabels . get_dec
-
-
-add_weight :: StandardDecor -> AnnotatedTree -> StandardDecor
-add_weight (StandardDecor l1 bs1 w1 sorted1) node  = 
-  let (StandardDecor _ bs2 w2 sorted2) = get_dec node in 
-  StandardDecor l1 ((+) <$> bs1 <*> bs2) (w1+w2) (merge sorted1 sorted2)
-
--- Remove the influence of one subtree from the metadata of another.
-subtract_weight :: StandardDecor -> AnnotatedTree -> StandardDecor
-subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =  
-  let (StandardDecor _ bs2 w2 sorted2) = get_dec node in 
-  StandardDecor l1 ((-) <$> bs1 <*> bs2) (w1-w2) (demerge sorted1 sorted2)
-
--- Turn on for extra invariant checking:
-debug :: Bool
-debug = False
-	
---------------------------------------------------------------------------------
-
--- I ran into a nasty bug as a result of "deriving Ord".  But I didn't end up getting rid of it.
---instance Ord AnnotatedTree where 
---  compare (NTLeaf _ _) (NTInterior _ _) = LT
---  compare (NTLeaf _ _) (NTLeaf _ _)     = EQ
---compare_nodes :: AnnotatedTree -> AnnotatedTree -> Ordering
 -- Our sorting criteria for the children of interior nodes:
-
 compare_childtrees :: AnnotatedTree -> AnnotatedTree -> Ordering
 compare_childtrees node1 node2 = 
     case (subtreeWeight $ get_dec node1) `compare` (subtreeWeight $ get_dec node2) of 
@@ -110,19 +64,17 @@ compare_childtrees node1 node2 =
 --     EQ -> case map deAtom (get_label_list node1) `compare` 
 --	        map deAtom (get_label_list node2) of
      EQ -> case (sortedLabels$ get_dec node1) `compare` (sortedLabels$ get_dec node2) of
-            --EQ -> error "FIXME EQ"
             EQ -> error$ "Internal invariant broken.  These two children have equal ordering priority:\n" 
 		  ++ "Pretty printing:\n  "
 		  ++ show (pPrint node1) ++ "\n  " ++ show (pPrint node2)
 		  ++ "\nFull data structures:\n  "
 		  ++ show (node1) ++ "\n  " ++ show (node2)
-
 	    x  -> x
      x -> x
 
 
--- This is it, here's the routine that transforms a tree into normal form.
--- This relies HEAVILY on lazy evaluation.
+-- | This is it, here's the routine that transforms a tree into normal form.
+--   This relies HEAVILY on lazy evaluation.
 normalize :: AnnotatedTree -> AnnotatedTree
 normalize tree = snd$ loop tree Nothing
  where 
@@ -130,7 +82,7 @@ normalize tree = snd$ loop tree Nothing
   add_context dec Nothing  = dec
   add_context dec (Just c) = add_weight dec c
 
-  -- loop: Walk over the tree.
+  -- loop: Walk over the tree, turning it inside-out in the process.
   -- Inputs: 
   --    1. node: the NewickTree node to process ("us")
   --    2. context: all nodes connected through the parent, "flipped" as though *we* were root
@@ -230,24 +182,26 @@ norm5 = normalize$ annotateWLabLists$ parseNewick "" "(D,E,C,(B,A));"
 -- Equivalence classes on Trees:
 ----------------------------------------------------------------------------------------------------
 
+-- | All the members of a BinEntry are isomorphic trees.
 data BinEntry = BE {
    members :: [String], 
    trees   :: [AnnotatedTree]
 }
   deriving Show 
 
--- We index the results of binning by topology-only trees that have their decorations removed.
--- (But we leave the weights on and leave the type as AnnotatedTree so as to acces Ord.)
+-- We index the results of binning by topology-only trees that have
+-- their decorations removed.  (But we leave the weights on.)
 type BinResults = M.Map AnnotatedTree BinEntry
 
--- Takes labeled trees, classifies labels into equivalence classes.
---binthem :: [(String, NewickTree BranchLen)] -> M.Map (NewickTree ()) BinEntry
+-- | The binning function.
+--   Takes labeled trees, classifies labels into equivalence classes.
 binthem :: [(String, NewickTree DefDecor)] -> BinResults
 binthem ls = binthem_normed normalized
  where
   normalized = map (\ (lab,tree) -> (lab, normalize $ annotateWLabLists tree)) ls
 
--- This version accepts trees that are already normalized:
+
+-- | This version accepts trees that are already normalized:
 binthem_normed :: [(String, AnnotatedTree)] -> BinResults
 binthem_normed normalized = 
 --   foldl (\ acc (lab,tree) -> M.insertWith update tree (BE{ members=[lab] }) acc)
@@ -260,9 +214,9 @@ binthem_normed normalized =
  update new old = BE (members new ++ members old) (trees new ++ trees old)
  --strip = fmap (const ())
 
--- Remove branch lengths and labels but leave weights and bootstraps
+-- | For binning.  Remove branch lengths and labels but leave weights.
 anonymize_annotated :: AnnotatedTree -> AnnotatedTree
-anonymize_annotated = fmap (\ (StandardDecor bl bs w labs) -> (StandardDecor 0 bs w []))
+anonymize_annotated = fmap (\ (StandardDecor bl bs w labs) -> (StandardDecor 0 Nothing w []))
 
 
 ----------------------------------------------------------------------------------------------------
@@ -428,9 +382,10 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
-       writeFile (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate$ avg_trees$ trees bentry) ++ ";\n")
-
---       writeFile (base i size ++".rawtree")  (show tr ++ ";\n") -- TempToggle
+       let avg = avg_trees$ trees bentry 
+       when debug$ do
+         writeFile (base i size ++".dbg") (show (pPrint (avg_trees$ trees bentry)) ++ "\n")
+       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate$ avg) ++ ";\n")
 
     when (not$ null warnings) $
 	writeFile (combine output_dir "bin_WARNINGS.txt")
@@ -450,14 +405,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
       forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, bentry)) -> do
-         let 
-             dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
-		                 --(annotateWLabLists$ fmap (const 0) tr)
-		                 -- TEMP FIXME -- using just ONE representative tree:
-		                 (--trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
-		                  --(head$ trees bentry) )
-				  (avg_trees$ trees bentry))
-	 when (size > 1 || numbins < 100) $ do 
+--	 when (size > 1 || numbins < 100) $ do 
+           let dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
+                                   --(annotateWLabLists$ fmap (const 0) tr)
+                                   -- TEMP FIXME -- using just ONE representative tree:
+                                   ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
+                                     --(head$ trees bentry) 
+ 				    (avg_trees$ trees bentry) )
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
@@ -619,6 +573,42 @@ maybeInsert :: (a -> a -> Ordering) -> Maybe a -> [a] -> [a]
 maybeInsert _  Nothing  ls = ls
 maybeInsert fn (Just x) ls = insertBy fn x ls
 
+-- annotateWLabLists :: NewickTree BranchLen -> AnnotatedTree
+annotateWLabLists :: NewickTree DefDecor -> AnnotatedTree
+annotateWLabLists tr = case tr of 
+  NTLeaf (bs,bl) n      -> NTLeaf (StandardDecor bl bs 1 [n]) n
+  NTInterior (bs,bl) ls -> 
+      let children = map annotateWLabLists ls in 
+      NTInterior (StandardDecor bl bs
+                  (sum $ map (subtreeWeight . get_dec) children)
+		  (foldl1 merge $ map (sortedLabels . get_dec) children))
+		 children
+
+-- | Take the extra annotations away.  Inverse of `annotateWLabLists`.
+deAnnotate :: AnnotatedTree -> NewickTree DefDecor 
+deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
+
+
+-- Number of LEAVES contained in subtree:
+get_weight :: NewickTree StandardDecor -> Int
+get_weight = subtreeWeight . get_dec
+
+-- Sorted list of leaf labels contained in subtree
+get_label_list :: NewickTree StandardDecor -> [Label]
+get_label_list   = sortedLabels . get_dec
+
+
+add_weight :: StandardDecor -> AnnotatedTree -> StandardDecor
+add_weight (StandardDecor l1 bs1 w1 sorted1) node  = 
+  let (StandardDecor _ bs2 w2 sorted2) = get_dec node in 
+  StandardDecor l1 ((+) <$> bs1 <*> bs2) (w1+w2) (merge sorted1 sorted2)
+
+-- Remove the influence of one subtree from the metadata of another.
+subtract_weight :: StandardDecor -> AnnotatedTree -> StandardDecor
+subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =  
+  let (StandardDecor _ bs2 w2 sorted2) = get_dec node in 
+  StandardDecor l1 ((-) <$> bs1 <*> bs2) (w1-w2) (demerge sorted1 sorted2)
+	
 
 ----------------------------------------------------------------------------------------------------
 -- UNIT TESTING
