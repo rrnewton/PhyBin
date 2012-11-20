@@ -33,6 +33,7 @@ data Flag
     | Version 
     | Output String
     | NumTaxa Int
+    | BranchThresh Double      
     | NullOpt
     | Graph | Draw
     | Force 
@@ -81,6 +82,9 @@ options =
        --  What's a good algorithm?  Insist they all have the same number?  Take the mode?
        
      , Option ['n']     ["numtaxa"] (ReqArg (NumTaxa . read) "NUM") "expect NUM taxa for this dataset"
+
+     , Option ['b']     ["branchcut"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
+       
 
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option ['f']     ["force"]   (NoArg Force)    "force phybin to consume and bin trees with different numbers of taxa"
@@ -147,6 +151,7 @@ main =
 	   Output s -> return cfg { output_dir= s }
 
 	   NumTaxa n -> return cfg { num_taxa= n }
+     	   BranchThresh n -> return cfg { branch_collapse_thresh= Just n }
 	   Graph     -> return cfg { do_graph= True } 
 	   Draw	     -> return cfg { do_draw = True } 
 	   View      -> return cfg -- Handled below

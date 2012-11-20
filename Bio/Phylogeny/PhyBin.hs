@@ -32,6 +32,7 @@ import qualified HSH
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
+import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 
 
@@ -296,11 +297,11 @@ int __builtin_popcount (unsigned int x);
    
 
 ----------------------------------------------------------------------------------------------------
--- Driver to put the pieces together (parse, normalize, bin)
-----------------------------------------------------------------------------------------------------
 
+-- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
-driver PBC{..} =
+driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_collapse_thresh } =
+   -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
     -- First, find out where we are and open the files:
@@ -353,7 +354,10 @@ driver PBC{..} =
            -- Clip off the first three characters:
            let 
 	       parsed = map_labels name_hack $ parseNewick file bstr
-	       annot  = annotateWLabLists parsed
+               pruned = case branch_collapse_thresh of 
+                          Nothing  -> parsed
+                          Just thr -> collapseBranches thr parsed
+	       annot  = annotateWLabLists pruned
 	       normal = normalize annot
 	       weight = get_weight annot
 
@@ -369,12 +373,12 @@ driver PBC{..} =
 	    else do 
 	     when verbose$ putStr "."
 
-	     num <- evaluate$ treeSize parsed
+	     num <- evaluate$ treeSize pruned
 	     --num <- evaluate$ cnt normal
 
 	     hClose h
 	     --return$ (num, [normal])
-	     return$ (num, [parsed], [])
+	     return$ (num, [pruned], [])
 
     putStrLn$ "\nNumber of input trees: " ++ show num_files
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat$ map snd3 results)

@@ -112,7 +112,8 @@ data PhyBinConfig =
       , output_dir :: String
       , inputs :: [String]
       , do_graph :: Bool
-      , do_draw :: Bool
+      , do_draw :: Bool        
+      , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
       }
 
 -- | The default phybin configuration.
@@ -125,6 +126,7 @@ default_phybin_config =
       , inputs = []
       , do_graph = False
       , do_draw = False
+      , branch_collapse_thresh = Nothing
      }
 
 ----------------------------------------------------------------------------------------------------
