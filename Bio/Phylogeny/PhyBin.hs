@@ -27,21 +27,20 @@ import qualified Data.Map                   as M
 import qualified Data.Set                   as S
 import           Debug.Trace         (trace)
 import           Control.Monad       (forM, forM_, filterM, when)
-import           Control.Exception   (handle, evaluate, SomeException)
+import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
 import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
 import           System.IO           (openFile, hClose, IOMode(ReadMode))
-import           Test.HUnit          ((~:),(~=?),Test,assertFailure,test)
+import           Test.HUnit          ((~:),(~=?),Test,test)
 import qualified HSH 
 
 -- For vizualization:
-import           Data.Graph.Inductive as G  hiding (run)
+import qualified Data.Graph.Inductive as G  hiding (run)
 import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
-import qualified Data.GraphViz.Attributes.Complete as Gattr
-import           Data.GraphViz.Attributes.Complete hiding (Label)
+import qualified Data.GraphViz.Attributes.Complete as GA
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (newick_parser)
@@ -92,8 +91,6 @@ file_exists path =
 -- General helper/utility functions:
 ----------------------------------------------------------------------------------------------------
 
-commasep :: Pretty a => [a] -> Doc
-commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
 
 fst3 :: (t, t1, t2) -> t
 snd3 :: (t, t1, t2) -> t1
@@ -324,6 +321,7 @@ normalize tree = snd$ loop tree Nothing
 
 
 -- Verify that our invariants are met:
+verify_sorted :: (Show a, Pretty a) => String -> (a -> NewickTree StandardDecor) -> [a] -> [a]
 verify_sorted msg = 
  if debug 
  then \ project nodes ->
@@ -338,21 +336,34 @@ verify_sorted msg =
 
 
 -- TODO: Salvage any of these tests that are worthwhile and get them into the unit tests:	        	
+tt :: AnnotatedTree
 tt = normalize $ annotateWLabLists $ run newick_parser "(A,(C,D,E),B);"
 
+tt0 :: IO (Chan (), AnnotatedTree)
 tt0 = drawNewickTree "tt0" $ annotateWLabLists $ run newick_parser "(A,(C,D,E),B);"
 
+tt2 :: G.Gr String Double
 tt2 = toGraph tt
+
+tt3 :: IO (Chan (), AnnotatedTree)
 tt3 = drawNewickTree "tt3" tt
 
+norm4 :: AnnotatedTree
 norm4 = norm "((C,D,E),B,A);"
+
+tt4 :: IO (Chan (), AnnotatedTree)
 tt4 = drawNewickTree "tt4"$ trace ("FINAL: "++ show (pPrint norm4)) $ norm4
 
+norm5 :: AnnotatedTree
 norm5 = normalize$ annotateWLabLists$ run newick_parser "(D,E,C,(B,A));"
+
+tt5 :: IO (Chan (), AnnotatedTree)
 tt5 = drawNewickTree "tt5"$ norm5
 
+tt5' :: String
 tt5' = prettyPrint' $ dotNewickTree "norm5" 1.0 norm5
 
+ttall :: IO (Chan (), AnnotatedTree)
 ttall = do tt3; tt4; tt5
 
 ----------------------------------------------------------------------------------------------------
@@ -430,8 +441,8 @@ int __builtin_popcount (unsigned int x);
 ----------------------------------------------------------------------------------------------------
 
 -- First we need to be able to convert our trees to FGL graphs:
-toGraph :: AnnotatedTree -> Gr String Double
-toGraph tree = run_ G.empty $ loop tree
+toGraph :: AnnotatedTree -> G.Gr String Double
+toGraph tree = G.run_ G.empty $ loop tree
   where
  loop (NTLeaf _ name) = 
     do let str = fromLabel name
@@ -441,12 +452,12 @@ toGraph tree = run_ G.empty $ loop tree
     do let bigname = concat$ map fromLabel sortedLabels
        names <- mapM loop ls
        G.insMapNodeM bigname
-       mapM_ (\x -> insMapEdgeM (bigname, x, 0.0)) names
+       mapM_ (\x -> G.insMapEdgeM (bigname, x, 0.0)) names
        return bigname
 
 -- This version uses the tree nodes themselves as graph labels.
-toGraph2 :: AnnotatedTree -> Gr AnnotatedTree Double
-toGraph2 tree = run_ G.empty $ loop tree
+toGraph2 :: AnnotatedTree -> G.Gr AnnotatedTree Double
+toGraph2 tree = G.run_ G.empty $ loop tree
   where
  loop node@(NTLeaf _  _) =  
     do G.insMapNodeM node 
@@ -455,7 +466,7 @@ toGraph2 tree = run_ G.empty $ loop tree
     do mapM_ loop ls
        G.insMapNodeM node
        -- Edge weights as just branchLen (not bootstrap):
-       mapM_ (\x -> insMapEdgeM (node, x, branchLen$ get_dec x)) ls
+       mapM_ (\x -> G.insMapEdgeM (node, x, branchLen$ get_dec x)) ls
        return ()
 
 
@@ -491,28 +502,28 @@ dotNewickTree title edge_scale tree =
  where 
   graph = toGraph2 tree
   myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
-  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
+  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
                                 Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
-  nodeAttrs :: (Int,AnnotatedTree) -> [Attribute]
+  nodeAttrs :: (Int,AnnotatedTree) -> [GA.Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
-    [ Gattr.Label$ StrLabel$ pack$ 
+    [ GA.Label$ GA.StrLabel$ pack$ 
       concat$ map fromLabel$ sortedLabels$ get_dec node
-    , Shape (if null children then {-PlainText-} Ellipse else PointShape)
-    , Style [SItem Filled []]
+    , GA.Shape (if null children then {-PlainText-} GA.Ellipse else GA.PointShape)
+    , GA.Style [GA.SItem GA.Filled []]
     ]
 
   -- TOGGLE:
-  --  edgeAttrs (_,_,weight) = [ArrowHead noArrow, Len (weight * edge_scale + bump), Gattr.Label (StrLabel$ show (weight))]
+  --  edgeAttrs (_,_,weight) = [ArrowHead noArrow, Len (weight * edge_scale + bump), GA.Label (StrLabel$ show (weight))]
   edgeAttrs (_,_,weight) = 
                            let draw_weight = compute_draw_weight weight edge_scale in
                            --trace ("EDGE WEIGHT "++ show weight ++ " drawn at "++ show draw_weight) $
-			   [ArrowHead Gv.noArrow,
-                            Gattr.Label$ StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
-			   --[ArrowHead noArrow, Gattr.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
+			   [GA.ArrowHead Gv.noArrow,
+                            GA.Label$ GA.StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
+			   --[ArrowHead noArrow, GA.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
 			    if weight == 0.0
-			    then [Color [X11Color Gv.Red], Len minlen]
-			    else [Len draw_weight]
+			    then [GA.Color [GA.X11Color Gv.Red], GA.Len minlen]
+			    else [GA.Len draw_weight]
   minlen = 0.7
   maxlen = 3.0
   compute_draw_weight w scale = 
@@ -527,29 +538,29 @@ dotNewickTree_debug title tree = Gv.graphToDot myparams graph
  where 
   graph = toGraph2 tree
   myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
-  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
+  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
 			        Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
-  nodeAttrs :: (Int,AnnotatedTree) -> [Attribute]
+  nodeAttrs :: (Int,AnnotatedTree) -> [GA.Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
-    [ Gattr.Label (if null children 
-  	        then StrLabel$ pack$ concat$ map fromLabel$ sortedLabels$ get_dec node
-	        else RecordLabel$ take (length children) $ 
+    [ GA.Label (if null children 
+  	        then GA.StrLabel$ pack$ concat$ map fromLabel$ sortedLabels$ get_dec node
+	        else GA.RecordLabel$ take (length children) $ 
                                   -- This will leave interior nodes unlabeled:
-	                          map (PortName . PN . pack) $ map show [1..]
+	                          map (GA.PortName . GA.PN . pack) $ map show [1..]
 		                  -- This version gives some kind of name to interior nodes:
 --	                          map (\ (i,ls) -> LabelledTarget (PN$ show i) (fromLabel$ head ls)) $ 
 --                                       zip [1..] (map (thd3 . get_dec) children)
                )
-    , Shape Record
-    , Style [SItem Filled []]
+    , GA.Shape GA.Record
+    , GA.Style [GA.SItem GA.Filled []]
     ]
 
-  edgeAttrs (num1,num2,weight) = 
-    let node1 = fromJust$ lab graph num1 
-	node2 = fromJust$ lab graph num2 	
+  edgeAttrs (num1, num2, _weight) = 
+    let node1 = fromJust$ G.lab graph num1 
+	node2 = fromJust$ G.lab graph num2 	
 	ind = fromJust$ elemIndex node2 (get_children node1)
-    in [TailPort$ LabelledPort (PN$ pack$ show$ 1+ind) (Just South)]
+    in [GA.TailPort$ GA.LabelledPort (GA.PN$ pack$ show$ 1+ind) (Just GA.South)]
 
 
 
@@ -570,18 +581,8 @@ runB file p input = case (parse p "" input) of
 	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
 		 Right x  -> x
 
-runPr :: Show a => Parser a -> String -> IO ()
-runPr prs str = print (run prs str)
-
 run :: Show a => Parser a -> String -> a
 run p input = runB "<unknown>" p (B.pack input)
-
-errortest :: t -> IO ()
-errortest x = 
-   --() ~=?
-    handle (\ (e::SomeException) -> return ()) $ 
-      do evaluate x
-         assertFailure "test was expected to throw an error"
 
 cnt :: NewickTree a -> Int
 cnt (NTLeaf _ _) = 1
@@ -897,10 +898,6 @@ foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
      NTInterior (dec:decls) $ zipWith consTrees ls1 ls2
     _ -> error "foldIsomorphicTrees: difference in tree shapes"
     
-
-bump :: Double
-bump = 0.00001 -- for DIRTY HACKS
-
 {- 
  ----------------------------------------
  PARSING TIMING TEST:
@@ -932,3 +929,23 @@ bump = 0.00001 -- for DIRTY HACKS
  -}
 
 
+
+--------------------------------------------------------------------------------
+-- No longer used:
+
+
+-- runPr :: Show a => Parser a -> String -> IO ()
+-- runPr prs str = print (run prs str)
+
+-- errortest :: t -> IO ()
+-- errortest x = 
+--    --() ~=?
+--     handle (\ (e::SomeException) -> return ()) $ 
+--       do evaluate x
+--          assertFailure "test was expected to throw an error"
+
+-- commasep :: Pretty a => [a] -> Doc
+-- commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
+
+-- bump :: Double
+-- bump = 0.00001 -- for DIRTY HACKS
