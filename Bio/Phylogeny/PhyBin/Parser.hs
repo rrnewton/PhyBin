@@ -2,12 +2,28 @@
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin.Parser
-       (newick_parser)
-       where 
-import Text.Parsec
-import Text.Parsec.ByteString.Lazy
-import Test.HUnit
-import Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, toLabel)
+       (newick_parser, parseNewick)
+       where
+import qualified Data.ByteString.Lazy.Char8 as B
+import           Data.Char          (isSpace)
+import           Text.Parsec
+import           Text.Parsec.ByteString.Lazy
+import           Test.HUnit         ()
+import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, toLabel)
+
+
+-- | Parse a bytestring into a NewickTree with branch lengths.  The
+--   first argument is file from which the data came and is just for
+--   error error messages.
+parseNewick :: String -> B.ByteString -> NewickTree DefDecor
+parseNewick file input = 
+  runB file newick_parser $
+  B.filter (not . isSpace) input
+
+runB :: Show a => String -> Parser a -> B.ByteString -> a
+runB file p input = case (parse p "" input) of
+	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
+		 Right x  -> x
 
 ----------------------------------------------------------------------------------------------------
 -- Newick file format parser definitions:
@@ -124,3 +140,8 @@ name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
    -- , "example: distances and leaf names (popular)"         ~: 6 ~=? cnt tre1
    -- , "example: distances and all names"                    ~: 6 ~=? cnt (run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;")
    -- , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? cnt (run newick_parser "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
+
+
+run :: Show a => Parser a -> String -> a
+run p input = runB "<unknown>" p (B.pack input)
+              

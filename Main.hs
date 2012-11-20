@@ -15,13 +15,15 @@ import           Test.HUnit            (runTestTT, Test, test)
 
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Bio.Phylogeny.PhyBin.CoreTypes 
-        ( NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..) ) 
+        ( NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..),
+          toLabel, fromLabel, Label  ) 
 import Bio.Phylogeny.PhyBin 
-         ( driver, parseNewick,
+         ( driver, 
            binthem, normalize, annotateWLabLists, map_labels, set_dec,
-           drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
+           drawNewickTree, dotNewickTree_debug,           
            unitTests
           )
+import Bio.Phylogeny.PhyBin.Parser (parseNewick)
 
 import Version
 

@@ -1,14 +1,17 @@
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, TypeSynonymInstances, CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin
        (
-         NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, StandardDecor(..),
-         driver, parseNewick,
+--         NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, StandardDecor(..),
+--         parseNewick,
+         driver, 
          binthem, normalize, annotateWLabLists, map_labels, set_dec,     
-         drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
+         drawNewickTree, dotNewickTree_debug,
+--         toLabel, fromLabel, Label,
          unitTests
        )
        where
@@ -43,7 +46,7 @@ import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
-import           Bio.Phylogeny.PhyBin.Parser (newick_parser)
+import           Bio.Phylogeny.PhyBin.Parser (newick_parser, parseNewick)
 
 
 -- TEMP / HACK:
@@ -337,10 +340,10 @@ verify_sorted msg =
 
 -- TODO: Salvage any of these tests that are worthwhile and get them into the unit tests:	        	
 tt :: AnnotatedTree
-tt = normalize $ annotateWLabLists $ run newick_parser "(A,(C,D,E),B);"
+tt = normalize $ annotateWLabLists $ parseNewick "" "(A,(C,D,E),B);"
 
 tt0 :: IO (Chan (), AnnotatedTree)
-tt0 = drawNewickTree "tt0" $ annotateWLabLists $ run newick_parser "(A,(C,D,E),B);"
+tt0 = drawNewickTree "tt0" $ annotateWLabLists $ parseNewick "" "(A,(C,D,E),B);"
 
 tt2 :: G.Gr String Double
 tt2 = toGraph tt
@@ -355,7 +358,7 @@ tt4 :: IO (Chan (), AnnotatedTree)
 tt4 = drawNewickTree "tt4"$ trace ("FINAL: "++ show (pPrint norm4)) $ norm4
 
 norm5 :: AnnotatedTree
-norm5 = normalize$ annotateWLabLists$ run newick_parser "(D,E,C,(B,A));"
+norm5 = normalize$ annotateWLabLists$ parseNewick "" "(D,E,C,(B,A));"
 
 tt5 :: IO (Chan (), AnnotatedTree)
 tt5 = drawNewickTree "tt5"$ norm5
@@ -568,28 +571,13 @@ dotNewickTree_debug title tree = Gv.graphToDot myparams graph
 -- Utilities and UNIT TESTING
 ----------------------------------------------------------------------------------------------------
 
--- | Parse a bytestring into a NewickTree with branch lengths.  The
---   first argument is file from which the data came and is just for
---   error error messages.
-parseNewick :: String -> B.ByteString -> NewickTree DefDecor
-parseNewick file input = 
-  runB file newick_parser $
-  B.filter (not . isSpace) input
-
-runB :: Show a => String -> Parser a -> B.ByteString -> a
-runB file p input = case (parse p "" input) of
-	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
-		 Right x  -> x
-
-run :: Show a => Parser a -> String -> a
-run p input = runB "<unknown>" p (B.pack input)
 
 cnt :: NewickTree a -> Int
 cnt (NTLeaf _ _) = 1
 cnt (NTInterior _ ls) = 1 + sum (map cnt ls)
 
 tre1 :: NewickTree DefDecor
-tre1 = run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+tre1 = parseNewick "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
 tre1draw :: IO (Chan (), AnnotatedTree)
 tre1draw = drawNewickTree "tre1"$ annotateWLabLists tre1
@@ -599,7 +587,7 @@ tre1dot = putStrLn$ prettyPrint' $ dotNewickTree "" 1.0 $ annotateWLabLists tre1
 
 
 norm :: String -> AnnotatedTree
-norm = normalize . annotateWLabLists . run newick_parser
+norm = norm2 . B.pack
 
 norm2 :: B.ByteString -> AnnotatedTree
 norm2 = normalize . annotateWLabLists . parseNewick "test"
@@ -634,9 +622,9 @@ unitTests =
    
    , "phbin: these 3 trees should fall in the same category" ~: 
       1 ~=? (length $ M.toList $
-             binthem [("one",   run newick_parser "(A,(C,D,E),B);"),
- 		      ("two",   run newick_parser "((C,D,E),B,A);"),
-		      ("three", run newick_parser "(D,E,C,(B,A));")])
+             binthem [("one",   parseNewick "" "(A,(C,D,E),B);"),
+ 		      ("two",   parseNewick "" "((C,D,E),B,A);"),
+		      ("three", parseNewick "" "(D,E,C,(B,A));")])
 
    ]
 
