@@ -1,13 +1,14 @@
 {-# LANGUAGE ScopedTypeVariables, RecordWildCards, TypeSynonymInstances, CPP #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin
        (
-         NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, 
+         NewickTree(..), PhyBinConfig(..), default_phybin_config,  DefDecor, StandardDecor(..),
          driver, parseNewick,
-         binthem, normalize, annotateWLabLists, map_labels, map_dec, set_dec,     
-         drawNewickTree, dotNewickTree_debug, toLabel, fromLabel,
+         binthem, normalize, annotateWLabLists, map_labels, set_dec,     
+         drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
          run_tests
        )
        where
@@ -26,6 +27,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import           Control.Monad
 import           Control.Exception hiding (try)
+import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent
 -- Wow, I actually couldn't figure out how to open a file (and get a
 -- HANDLE) so that I could then use getFileAttributes under
@@ -281,16 +283,24 @@ name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 
 --------------------------------------------------------------------------------
 
--- A common type of tree is "AnnotatedTree", which contains three things:
---  (1) branch length from parent to "this" node
---  (2) subtree weights for future use
---      (defined as number of LEAVES, not counting intermediate nodes)
---  (3) sorted lists of labels for symmetry breaking
+-- A common type of tree is "AnnotatedTree", which contains the standard decorator.
 type AnnotatedTree = NewickTree StandardDecor
 
+-- | The standard decoration includes:
+-- 
+--  (1) branch length from parent to "this" node
+--  (2) bootstrap values for the node
+-- 
+--  (3) subtree weights for future use
+--      (defined as number of LEAVES, not counting intermediate nodes)
+--  (4) sorted lists of labels for symmetry breaking
 data StandardDecor = StandardDecor {
   branchLen     :: BranchLen,
   bootStrap     :: Maybe Int,
+
+  -- The rest of these are used by the computations below.  These are
+  -- cached (memoized) values that could be recomputed:
+  ----------------------------------------
   subtreeWeight :: Int,
   sortedLabels  :: [Label]
  }
@@ -307,6 +317,10 @@ annotateWLabLists tr = case tr of
 		  (foldl1 merge $ map (sortedLabels . get_dec) children))
 		 children
 
+-- | Take the extra annotations away.  Inverse of `annotateWLabLists`.
+deAnnotate :: AnnotatedTree -> NewickTree DefDecor 
+deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
+
 instance Functor NewickTree where 
    fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
    fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
@@ -315,10 +329,10 @@ instance Functor NewickTree where
 map_labels fn (NTLeaf     dec lab) = NTLeaf dec $ fn lab
 map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
 
--- | Apply a function to all the decorations in a tre.
-map_dec :: (d1 -> d2) -> NewickTree d1 -> NewickTree d2
-map_dec fn (NTLeaf     dec lab) = NTLeaf (fn dec) lab
-map_dec fn (NTInterior dec ls)  = NTInterior (fn dec) $ map (map_dec fn) ls
+-- -- | Apply a function to all the decorations in a tre.
+-- map_dec :: (d1 -> d2) -> NewickTree d1 -> NewickTree d2
+-- map_dec fn (NTLeaf     dec lab) = NTLeaf (fn dec) lab
+-- map_dec fn (NTInterior dec ls)  = NTInterior (fn dec) $ map (map_dec fn) ls
 
 all_labels (NTLeaf     _ lab) = [lab]
 all_labels (NTInterior _ ls)  = concat$ map all_labels ls
@@ -341,14 +355,16 @@ get_weight = subtreeWeight . get_dec
 get_label_list   = sortedLabels . get_dec
 
 
+add_weight :: StandardDecor -> AnnotatedTree -> StandardDecor
 add_weight (StandardDecor l1 bs1 w1 sorted1) node  = 
-  let (StandardDecor _ _ w2 sorted2) = get_dec node in 
-  (l1, w1+w2, merge sorted1 sorted2)
+  let (StandardDecor _ bs2 w2 sorted2) = get_dec node in 
+  StandardDecor l1 ((+) <$> bs1 <*> bs2) (w1+w2) (merge sorted1 sorted2)
 
 -- Remove the influence of one subtree from the metadata of another.
-subtract_weight (l1,w1,sorted1) node =  
-  let (_,w2,sorted2) = get_dec node in 
-  (l1, w1-w2, demerge sorted1 sorted2)
+subtract_weight :: StandardDecor -> AnnotatedTree -> StandardDecor
+subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =  
+  let (StandardDecor _ bs2 w2 sorted2) = get_dec node in 
+  StandardDecor l1 ((-) <$> bs1 <*> bs2) (w1-w2) (demerge sorted1 sorted2)
 
 -- Turn on for extra invariant checking:
 debug = False
@@ -409,7 +425,7 @@ normalize tree = snd$ loop tree Nothing
 	            --error "normalize: leaf becoming root not currently supported."
 	)
     
-    NTInterior dec@(l,w,_) ls -> 
+    NTInterior dec@(StandardDecor l _ w _) ls -> 
      let 
          -- If this node becomes the root, the parent becomes one of our children:
          inverted = NTInterior inverted_dec inverted_children
@@ -525,9 +541,9 @@ binthem_normed normalized =
  update new old = BE (members new ++ members old) (trees new ++ trees old)
  --strip = fmap (const ())
 
--- Remove branch lengths and labels but leave weights
+-- Remove branch lengths and labels but leave weights and bootstraps
 anonymize_annotated :: AnnotatedTree -> AnnotatedTree
-anonymize_annotated = fmap (\ (bl, w, labs) -> (0, w, []))
+anonymize_annotated = fmap (\ (StandardDecor bl bs w labs) -> (StandardDecor 0 bs w []))
 
 
 ----------------------------------------------------------------------------------------------------
@@ -565,32 +581,33 @@ int __builtin_popcount (unsigned int x);
 -- Visualization with GraphViz and FGL:
 ----------------------------------------------------------------------------------------------------
 
--- First we need to be able to convert to FGL graphs:
+-- First we need to be able to convert our trees to FGL graphs:
 toGraph :: AnnotatedTree -> Gr String Double
 toGraph tree = run_ G.empty $ loop tree
   where
- loop (NTLeaf (l,_,_) name) = 
+ loop (NTLeaf _ name) = 
     do let str = fromLabel name
        G.insMapNodeM str
        return str
- loop (NTInterior (l,_,sorted) ls) =
-    do let bigname = concat$ map fromLabel sorted
+ loop (NTInterior (StandardDecor{sortedLabels}) ls) =
+    do let bigname = concat$ map fromLabel sortedLabels
        names <- mapM loop ls
        G.insMapNodeM bigname
        mapM_ (\x -> insMapEdgeM (bigname, x, 0.0)) names
        return bigname
 
--- This version uses the tree nodes themselves as labels.
+-- This version uses the tree nodes themselves as graph labels.
 toGraph2 :: AnnotatedTree -> Gr AnnotatedTree Double
 toGraph2 tree = run_ G.empty $ loop tree
   where
  loop node@(NTLeaf _  _) =  
     do G.insMapNodeM node 
        return ()
- loop node@(NTInterior (l,_,sorted) ls) =
+ loop node@(NTInterior _ ls) =
     do mapM_ loop ls
-       G.insMapNodeM node 
-       mapM_ (\x -> insMapEdgeM (node, x, fst3$ get_dec x)) ls
+       G.insMapNodeM node
+       -- Edge weights as just branchLen (not bootstrap):
+       mapM_ (\x -> insMapEdgeM (node, x, branchLen$ get_dec x)) ls
        return ()
 
 
@@ -632,7 +649,7 @@ dotNewickTree title edge_scale tree =
   nodeAttrs (num,node) =
     let children = get_children node in 
     [ Gattr.Label$ StrLabel$ pack$ 
-      concat$ map fromLabel$ thd3$ get_dec node
+      concat$ map fromLabel$ sortedLabels$ get_dec node
     , Shape (if null children then {-PlainText-} Ellipse else PointShape)
     , Style [SItem Filled []]
     ]
@@ -668,7 +685,7 @@ dotNewickTree_debug title tree = graphToDot myparams graph
   nodeAttrs (num,node) =
     let children = get_children node in 
     [ Gattr.Label (if null children 
-  	        then StrLabel$ pack$ concat$ map fromLabel$ thd3$ get_dec node
+  	        then StrLabel$ pack$ concat$ map fromLabel$ sortedLabels$ get_dec node
 	        else RecordLabel$ take (length children) $ 
                                   -- This will leave interior nodes unlabeled:
 	                          map (PortName . PN . pack) $ map show [1..]
@@ -764,7 +781,7 @@ tests =
    , "annotateWLabLists" ~: 
      --NTInterior (0.0,[A,B,C,D]) [NTLeaf (0.1,[A]) A,NTLeaf (0.2,[B]) B,NTInterior (0.5,[C,D]) [NTLeaf (0.3,[C]) C,NTLeaf (0.4,[D]) D]]
         map toLabel ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
-    ~=? sortedLabels$ get_dec (annotateWLabLists tr1)
+    ~=? sortedLabels (get_dec (annotateWLabLists tr1))
 
    -- Make sure that all of these normalize to the same thing.
    , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(A,(C,D,E),B);")
@@ -946,7 +963,7 @@ driver PBC{..} =
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
-       writeFile (base i size ++".tr")  (show (displayTree (avg_trees$ trees bentry)) ++ ";\n")
+       writeFile (base i size ++".tr")  (show (displayTree$ deAnnotate$ avg_trees$ trees bentry) ++ ";\n")
 
 --       writeFile (base i size ++".rawtree")  (show tr ++ ";\n") -- TempToggle
 
@@ -998,11 +1015,11 @@ avg_branchlen ls = fst total / snd total
        trace ("!!! GOT NEGATIVE BRANCH LENGTH: "++ show l) $
        (0,0)
 -}
-   sum_tree (NTLeaf (0,_,_) _)         = (0,0)
-   sum_tree (NTLeaf (l,_,_) _)         = (abs l,1)
-   sum_tree (NTInterior (l,_,_) ls) = 
+   sum_tree (NTLeaf (StandardDecor{branchLen=0}) _)    = (0,0)
+   sum_tree (NTLeaf (StandardDecor{branchLen}) _)      = (abs branchLen,1)
+   sum_tree (NTInterior (StandardDecor{branchLen}) ls) = 
        let (x,y) = sum_ls$ map sum_tree ls in
-       if l == 0 then (x, y) else ((abs l) + x, 1+y)
+       if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)
 
 {-
 nonzero_blens :: AnnotatedTree -> Int
@@ -1017,16 +1034,22 @@ nonzero_blens node =
 -- This comes up with some blending of edge lengths.
 avg_trees :: [AnnotatedTree] -> AnnotatedTree
 avg_trees ls = --summed -- TEMPTOGGLE
-    fmap (\ (blen,w,ls) -> (blen / count, w,ls)) summed
+    fmap (\ (StandardDecor blen bs w ls) ->
+            (StandardDecor (blen / count)
+                           ((round . (/ count) . fromIntegral) <$> bs)
+             w ls)) summed
  where
   summed = foldl1 sum_2trees ls
   count = fromIntegral$ length ls
 
   sum_2trees a b = case (a,b) of
-    (NTLeaf (l1,w,ls) nm, NTLeaf (l2,_,_) _) -> NTLeaf (l1+l2,w,ls) nm
-    (NTInterior (l1,w,ls) ls1, 
-     NTInterior (l2,_,_)  ls2) -> NTInterior (l1+l2,w,ls) $ 
-                                             map (uncurry sum_2trees) $ zip ls1 ls2
+    (NTLeaf (StandardDecor l1 bs1 w ls) nm,
+     NTLeaf (StandardDecor l2 bs2 _ _ ) _) ->
+     NTLeaf (StandardDecor (l1+l2) ((+) <$> bs1 <*> bs2) w ls) nm
+    (NTInterior (StandardDecor l1 bs1 w ls) ls1, 
+     NTInterior (StandardDecor l2 bs2 _ _ ) ls2) ->
+     NTInterior (StandardDecor (l1+l2) ((+) <$> bs1 <*> bs2) w ls) $ 
+       map (uncurry sum_2trees) $ zip ls1 ls2
     _ -> error "avg_trees: applied to non-isomorphic trees"
 
 

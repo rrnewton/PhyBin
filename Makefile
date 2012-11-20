@@ -78,25 +78,32 @@ legionella:
 	./phybin.exe $(LOCALSETS)/legionella/legionella_orthologs_aa/ -o $(LOCALSETS)/legionella/phybin_outputs/ -m ../datasets/legionella/name_table_hack_legionella.txt -s 0123456789 -n 4 -g
 
 
+
 # Newer ones [2012.11.19]:
 newbatch: rickettsia rickettsiales wolbachia
 
-#--------------------------------------------------------------------------------
-rickettsia: $(LOCALSETS)/Rickettsia/renaming_table.txt
+#------------------------------------------------------------
+rickettsia:    $(LOCALSETS)/Rickettsia/renaming_table.txt
+	rm -rf $(LOCALSETS)/Rickettsia/phybin_outputs
+	mkdir  $(LOCALSETS)/Rickettsia/phybin_outputs
 	./phybin.exe -g -n 15 -m $(LOCALSETS)/Rickettsia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsia/phybin_output/ $(LOCALSETS)/Rickettsia/final_trees/*BranchLab*.out 
 
 $(LOCALSETS)/Rickettsia/renaming_table.txt: $(LOCALSETS)/Rickettsia/Rickettsia_orthololgs.txt
 	runghc stripTable.hs $^ > $@
 
-#--------------------------------------------------------------------------------
+#------------------------------------------------------------
 rickettsiales: $(LOCALSETS)/Rickettsiales/renaming_table.txt
+	rm -rf $(LOCALSETS)/Rickettsiales/phybin_outputs
+	mkdir  $(LOCALSETS)/Rickettsiales/phybin_outputs
 	./phybin.exe -g -n 29 -m $(LOCALSETS)/Rickettsiales/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsiales/phybin_output/ $(LOCALSETS)/Rickettsiales/final_trees/*BranchLab*.out 
 
 $(LOCALSETS)/Rickettsiales/renaming_table.txt: $(LOCALSETS)/Rickettsiales/Rickettsiales_orthologs.txt
 	runghc stripTable.hs $^ > $@
 
-#--------------------------------------------------------------------------------
-wolbachia: $(LOCALSETS)/Wolbachia/renaming_table.txt
+#------------------------------------------------------------
+wolbachia:     $(LOCALSETS)/Wolbachia/renaming_table.txt
+	rm -rf $(LOCALSETS)/Wolbachia/phybin_outputs
+	mkdir  $(LOCALSETS)/Wolbachia/phybin_outputs
 	./phybin.exe -g -n 4 -m $(LOCALSETS)/Wolbachia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Wolbachia/phybin_output/ $(LOCALSETS)/Wolbachia/final_trees/*BranchLab*.out 
 
 $(LOCALSETS)/Wolbachia/renaming_table.txt: $(LOCALSETS)/Wolbachia/Wolbachia_orthologs.txt

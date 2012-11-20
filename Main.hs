@@ -19,10 +19,10 @@ import           System.Exit
 
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Bio.Phylogeny.PhyBin
-         (NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, 
+         (NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..),
           driver, parseNewick,
-          binthem, normalize, name_hack, annotateWLabLists, map_labels, map_dec, set_dec,
-          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel,
+          binthem, normalize, name_hack, annotateWLabLists, map_labels, set_dec,
+          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
           run_tests)
 import Version
 
@@ -236,22 +236,28 @@ ls = [("a",a),("b",b)]
 num_binned = M.size $ binthem ls
 
 a_ = ("980.dnd",
-      map_dec (\x -> (Nothing,x)) $ 
+      fmap (\x -> (Nothing,x)) $ 
       NTInterior 0.0 [NTInterior 5.697e-2 [NTLeaf 3.95e-2 "SM",NTLeaf 5.977e-2 "SD"],NTLeaf 0.13143 "RE",NTInterior 0.13899 [NTInterior 9.019e-2 [NTLeaf 0.11856 "BB",NTLeaf 0.13592 "BJ"],NTInterior 0.13194 [NTLeaf 0.19456 "MB",NTLeaf 0.16603 "ML"]]])
 
 b_ = ("999.dnd",
-      map_dec (\x -> (Nothing,x)) $ 
+      fmap (\x -> (Nothing,x)) $ 
       NTInterior 0.0 [NTInterior 6.527e-2 [NTInterior 0.13734 [NTLeaf 2.975e-2 "SM",NTLeaf 3.002e-2 "SD"],NTLeaf 0.18443 "RE"],NTInterior 6.621e-2 [NTLeaf 0.16184 "MB",NTLeaf 0.15233 "ML"],NTInterior 0.23143 [NTLeaf 9.192e-2 "BB",NTLeaf 0.10125 "BJ"]])
 
 -- But THIS is two:  ack!
 num2 = M.size $ binthem [a_,b_]
 
 -- Here's the test that breaks things:
+a_norm :: NewickTree StandardDecor
 a_norm = normalize (annotateWLabLists$ snd a_)
 
 --a_norm = NTInterior (0.13899,7,["BB","BJ","MB","ML","RE","SD","SM"]) [NTInterior (0.0,3,["RE","SD","SM"]) [NTLeaf (0.13143,1,["RE"]) "RE",NTInterior (5.697e-2,2,["SD","SM"]) [NTLeaf (5.977e-2,1,["SD"]) "SD",NTLeaf (3.95e-2,1,["SM"]) "SM"]],NTInterior (9.019e-2,2,["BB","BJ"]) [NTLeaf (0.11856,1,["BB"]) "BB",NTLeaf (0.13592,1,["BJ"]) "BJ"],NTInterior (0.13194,2,["MB","ML"]) [NTLeaf (0.19456,1,["MB"]) "MB",NTLeaf (0.16603,1,["ML"]) "ML"]]
 
-b_norm = NTInterior (0.0,7,["BB","BJ","MB","ML","RE","SD","SM"]) [NTInterior (0.23143,2,["BB","BJ"]) [NTLeaf (9.192e-2,1,["BB"]) "BB",NTLeaf (0.10125,1,["BJ"]) "BJ"],NTInterior (6.621e-2,2,["MB","ML"]) [NTLeaf (0.16184,1,["MB"]) "MB",NTLeaf (0.15233,1,["ML"]) "ML"],NTInterior (6.527e-2,3,["RE","SD","SM"]) [NTLeaf (0.18443,1,["RE"]) "RE",NTInterior (0.13734,2,["SD","SM"]) [NTLeaf (3.002e-2,1,["SD"]) "SD",NTLeaf (2.975e-2,1,["SM"]) "SM"]]]
+b_norm_ :: NewickTree (Double, Int, [Label])
+b_norm_ = NTInterior (0.0,7,["BB","BJ","MB","ML","RE","SD","SM"])
+         [NTInterior (0.23143,2,["BB","BJ"]) [NTLeaf (9.192e-2,1,["BB"]) "BB",NTLeaf (0.10125,1,["BJ"]) "BJ"],NTInterior (6.621e-2,2,["MB","ML"]) [NTLeaf (0.16184,1,["MB"]) "MB",NTLeaf (0.15233,1,["ML"]) "ML"],NTInterior (6.527e-2,3,["RE","SD","SM"]) [NTLeaf (0.18443,1,["RE"]) "RE",NTInterior (0.13734,2,["SD","SM"]) [NTLeaf (3.002e-2,1,["SD"]) "SD",NTLeaf (2.975e-2,1,["SM"]) "SM"]]]
+
+b_norm :: NewickTree StandardDecor
+b_norm = fmap (\ (bl,w,ls) -> StandardDecor bl Nothing w ls) b_norm_
 
 d1 = drawNewickTree "" a_norm
 d2 = drawNewickTree "" b_norm
