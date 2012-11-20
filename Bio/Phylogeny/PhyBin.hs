@@ -13,54 +13,43 @@ module Bio.Phylogeny.PhyBin
        )
        where
 
-import           Text.Printf
-import           Text.Parsec
-import           Text.Parsec.ByteString.Lazy 
-import           Data.Function  (on)
-import           Data.List      (delete, minimumBy, sortBy, insertBy, intersperse,
-                                 elemIndex, sort)
-import           Data.Maybe     (fromJust, fromMaybe)
-import           Data.Char      (isSpace)
-import           Data.Text.Lazy (pack)
+import           Text.Printf        (printf)
+import           Text.Parsec        (parse)
+import           Text.Parsec.ByteString.Lazy (Parser)
+import           Data.Function      (on)
+import           Data.List          (delete, minimumBy, sortBy, insertBy, intersperse,
+                                     elemIndex, sort)
+import           Data.Maybe         (fromJust, fromMaybe)
+import           Data.Char          (isSpace)
+import           Data.Text.Lazy     (pack)
 import qualified Data.ByteString.Lazy.Char8 as B
-import qualified Data.Map as M
-import qualified Data.Set as S
-import           Control.Monad
-import           Control.Exception hiding (try)
+import qualified Data.Map                   as M
+import qualified Data.Set                   as S
+import           Debug.Trace         (trace)
+import           Control.Monad       (forM, forM_, filterM, when)
+import           Control.Exception   (handle, evaluate, SomeException)
 import           Control.Applicative ((<$>),(<*>))
-import           Control.Concurrent
--- Wow, I actually couldn't figure out how to open a file (and get a
--- HANDLE) so that I could then use getFileAttributes under
--- System.Win32.  Giving up because I think I can just use the
--- OS-independent System.Directory:
-import           System.FilePath    (combine)
-import           System.Environment ()
-import           System.Directory (doesFileExist, doesDirectoryExist,
-                                   getDirectoryContents, getCurrentDirectory)
-import           System.IO
-import           Test.HUnit
+import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
+import           System.FilePath     (combine)
+import           System.Directory    (doesFileExist, doesDirectoryExist,
+                                      getDirectoryContents, getCurrentDirectory)
+import           System.IO           (openFile, hClose, IOMode(ReadMode))
+import           Test.HUnit          ((~:),(~=?),Test,assertFailure,test)
 import qualified HSH 
 
 -- For vizualization:
 import           Data.Graph.Inductive as G  hiding (run)
--- OLD: Label/toLabel were exported on graphviz ~2999.11:
---import Data.GraphViz        as Gv hiding (Label, toLabel) 
-import           Data.GraphViz        as Gv hiding (parse, toLabel)
-
+import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as Gattr
 import           Data.GraphViz.Attributes.Complete hiding (Label)
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
-import           Debug.Trace
+import           Bio.Phylogeny.PhyBin.CoreTypes
+import           Bio.Phylogeny.PhyBin.Parser (newick_parser)
 
-import Bio.Phylogeny.PhyBin.CoreTypes
-import Bio.Phylogeny.PhyBin.Parser (newick_parser)
 
 -- TEMP / HACK:
 prettyPrint' :: Show a => a -> String
 prettyPrint' = show
-
-
-
 
 
 ----------------------------------------------------------------------------------------------------
@@ -103,10 +92,12 @@ file_exists path =
 -- General helper/utility functions:
 ----------------------------------------------------------------------------------------------------
 
---commacat ls = hcat (intersperse (text ", ") $ map pPrint ls)
 commasep :: Pretty a => [a] -> Doc
 commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
 
+fst3 :: (t, t1, t2) -> t
+snd3 :: (t, t1, t2) -> t1
+thd3 :: (t, t1, t2) -> t2
 fst3 (a,_,_) = a
 snd3 (_,b,_) = b
 thd3 (_,_,c) = c
@@ -475,7 +466,7 @@ drawNewickTree title tree =
   do chan <- newChan
      let dot = dotNewickTree title (1.0 / avg_branchlen [tree])
 	                     tree
-	 runit = do runGraphvizCanvas default_cmd dot Xlib
+	 runit = do Gv.runGraphvizCanvas default_cmd dot Gv.Xlib
 		    writeChan chan ()
      --str <- prettyPrint d
      --putStrLn$ "Generating the following graphviz tree:\n " ++ str
@@ -485,7 +476,7 @@ drawNewickTree title tree =
      return (chan, tree)
 
 --default_cmd = TwoPi -- Totally ignores edge lengths.
-default_cmd = Neato
+default_cmd = Gv.Neato
 
 -- Show a float without scientific notation:
 myShowFloat :: Double -> String
@@ -493,15 +484,15 @@ myShowFloat :: Double -> String
 myShowFloat fl = printf "%.4f" fl
 
 
-dotNewickTree :: String -> Double -> AnnotatedTree -> DotGraph G.Node
+dotNewickTree :: String -> Double -> AnnotatedTree -> Gv.DotGraph G.Node
 dotNewickTree title edge_scale tree = 
     --trace ("EDGE SCALE: " ++ show edge_scale) $
-    graphToDot myparams graph
+    Gv.graphToDot myparams graph
  where 
   graph = toGraph2 tree
-  myparams :: GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
-  myparams = defaultParams { globalAttributes= [GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
-			     fmtNode= nodeAttrs, fmtEdge= edgeAttrs }
+  myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
+  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
+                                Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
   nodeAttrs :: (Int,AnnotatedTree) -> [Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
@@ -516,11 +507,11 @@ dotNewickTree title edge_scale tree =
   edgeAttrs (_,_,weight) = 
                            let draw_weight = compute_draw_weight weight edge_scale in
                            --trace ("EDGE WEIGHT "++ show weight ++ " drawn at "++ show draw_weight) $
-			   [ArrowHead noArrow,
+			   [ArrowHead Gv.noArrow,
                             Gattr.Label$ StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
 			   --[ArrowHead noArrow, Gattr.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
 			    if weight == 0.0
-			    then [Color [X11Color Red], Len minlen]
+			    then [Color [X11Color Gv.Red], Len minlen]
 			    else [Len draw_weight]
   minlen = 0.7
   maxlen = 3.0
@@ -531,13 +522,13 @@ dotNewickTree title edge_scale tree =
 
 
 -- This version shows the ordered/rooted structure of the normalized tree.
-dotNewickTree_debug :: String -> AnnotatedTree -> DotGraph G.Node
-dotNewickTree_debug title tree = graphToDot myparams graph
+dotNewickTree_debug :: String -> AnnotatedTree -> Gv.DotGraph G.Node
+dotNewickTree_debug title tree = Gv.graphToDot myparams graph
  where 
   graph = toGraph2 tree
-  myparams :: GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
-  myparams = defaultParams { globalAttributes= [GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
-			     fmtNode= nodeAttrs, fmtEdge= edgeAttrs }
+  myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
+  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [Gattr.Label$ StrLabel$ pack title]],
+			        Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
   nodeAttrs :: (Int,AnnotatedTree) -> [Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
@@ -811,7 +802,7 @@ driver PBC{..} =
 		                  --(head$ trees bentry) )
 				  (avg_trees$ trees bentry))
 	 when (size > 1 || numbins < 100) $ do 
-	   _ <- runGraphvizCommand default_cmd dot Pdf (base i size ++ ".pdf")
+	   _ <- Gv.runGraphvizCommand default_cmd dot Gv.Pdf (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
 

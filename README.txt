@@ -110,7 +110,7 @@ wrong number of taxa are ignored.
 - - - - - - - - - - - - - - -
 Authors: Irene and Ryan Newton
 
-Contact email: `inewton` `wellesley` `edu` with "at" and "dot" inserted.
+Contact email: `irnewton` `indiana` `edu` (with "at" and "dot" inserted).
 
 
 
