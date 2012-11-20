@@ -1,3 +1,4 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -5,6 +6,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        (
          NewickTree(..), displayDefaultTree,
          DefDecor, StandardDecor(..),
+         get_dec, set_dec, get_children, avg_branchlen,
          
          PhyBinConfig(..), default_phybin_config,
 
@@ -17,7 +19,6 @@ import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 ----------------------------------------------------------------------------------------------------
 -- Type definitions
 ----------------------------------------------------------------------------------------------------
-
 
 type BranchLen = Double
 
@@ -142,3 +143,30 @@ map_but_last _ [h] = [h]
 map_but_last fn (h:t) = fn h : map_but_last fn t
 
 
+
+get_dec :: NewickTree t -> t
+get_dec (NTLeaf     dec _) = dec
+get_dec (NTInterior dec _) = dec
+
+-- Set all the decorations to a constant:
+set_dec :: b -> NewickTree a -> NewickTree b
+set_dec d = fmap (const d)
+--set_dec d (NTLeaf _ x) = NTLeaf d x
+--set_dec d (NTInterior _ ls) = NTInterior d $ map (set_dec d) ls
+
+get_children :: NewickTree t -> [NewickTree t]
+get_children (NTLeaf _ _) = []
+get_children (NTInterior _ ls) = ls
+
+
+-- | Average branch length across all branches in all all trees.
+avg_branchlen :: [NewickTree StandardDecor] -> Double
+avg_branchlen origls = fst total / snd total
+  where
+   total = sum_ls $ map sum_tree origls
+   sum_ls ls = (sum$ map fst ls, sum$ map snd ls)
+   sum_tree (NTLeaf (StandardDecor{branchLen=0}) _)    = (0,0)
+   sum_tree (NTLeaf (StandardDecor{branchLen}) _)      = (abs branchLen,1)
+   sum_tree (NTInterior (StandardDecor{branchLen}) ls) = 
+       let (x,y) = sum_ls$ map sum_tree ls in
+       if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)

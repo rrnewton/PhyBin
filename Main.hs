@@ -20,10 +20,10 @@ import Bio.Phylogeny.PhyBin.CoreTypes
 import Bio.Phylogeny.PhyBin 
          ( driver, 
            binthem, normalize, annotateWLabLists, map_labels, set_dec,
-           drawNewickTree, dotNewickTree_debug,           
            unitTests
           )
 import Bio.Phylogeny.PhyBin.Parser (parseNewick)
+import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
 
 import Version
 
@@ -186,7 +186,7 @@ view_graphs PBC{..} =
                 putStrLn$ "Drawing "++ file ++"...\n"
 		str <- B.readFile file
 		putStrLn$ "Parsed: " ++ (B.unpack str)
- 	        (chan, _tr) <- drawNewickTree file $ 
+ 	        (chan, _tr) <- viewNewickTree file $ 
 			       annotateWLabLists$ 
 			       map_labels name_hack $ 
 			       parseNewick file str
@@ -278,10 +278,10 @@ b_norm :: NewickTree StandardDecor
 b_norm = fmap (\ (bl,w,ls) -> StandardDecor bl Nothing w ls) b_norm_
 
 d1 :: IO (Chan (), NewickTree StandardDecor)
-d1 = drawNewickTree "" a_norm
+d1 = viewNewickTree "" a_norm
 
 d2 :: IO (Chan (), NewickTree StandardDecor)
-d2 = drawNewickTree "" b_norm
+d2 = viewNewickTree "" b_norm
 
 d1_ :: IO ThreadId
 d1_ = forkIO $ do runGraphvizCanvas Dot (dotNewickTree_debug "" a_norm) Xlib; return ()

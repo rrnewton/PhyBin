@@ -10,29 +10,21 @@ module Bio.Phylogeny.PhyBin
 --         parseNewick,
          driver, 
          binthem, normalize, annotateWLabLists, map_labels, set_dec,     
-         drawNewickTree, dotNewickTree_debug,
 --         toLabel, fromLabel, Label,
          unitTests
        )
        where
 
-import           Text.Printf        (printf)
-import           Text.Parsec        (parse)
-import           Text.Parsec.ByteString.Lazy (Parser)
 import           Data.Function      (on)
-import           Data.List          (delete, minimumBy, sortBy, insertBy, intersperse,
-                                     elemIndex, sort)
-import           Data.Maybe         (fromJust, fromMaybe)
-import           Data.Char          (isSpace)
-import           Data.Text.Lazy     (pack)
+import           Data.List          (delete, minimumBy, sortBy, insertBy, intersperse, sort)
+import           Data.Maybe         (fromMaybe)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
-import           Debug.Trace         (trace)
 import           Control.Monad       (forM, forM_, filterM, when)
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
-import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
+import           Control.Concurrent  (Chan)
 import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
@@ -41,17 +33,10 @@ import           Test.HUnit          ((~:),(~=?),Test,test)
 import qualified HSH 
 
 -- For vizualization:
-import qualified Data.Graph.Inductive as G  hiding (run)
-import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
-import qualified Data.GraphViz.Attributes.Complete as GA
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
-import           Bio.Phylogeny.PhyBin.Parser (newick_parser, parseNewick)
-
-
--- TEMP / HACK:
-prettyPrint' :: Show a => a -> String
-prettyPrint' = show
+import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
+import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 
 
 ----------------------------------------------------------------------------------------------------
@@ -178,19 +163,6 @@ all_labels :: NewickTree t -> [Label]
 all_labels (NTLeaf     _ lbl) = [lbl]
 all_labels (NTInterior _ ls)  = concat$ map all_labels ls
 
-get_dec :: NewickTree t -> t
-get_dec (NTLeaf     dec _) = dec
-get_dec (NTInterior dec _) = dec
-
--- Set all the decorations to a constant:
-set_dec :: b -> NewickTree a -> NewickTree b
-set_dec d = fmap (const d)
---set_dec d (NTLeaf _ x) = NTLeaf d x
---set_dec d (NTInterior _ ls) = NTInterior d $ map (set_dec d) ls
-
-get_children :: NewickTree t -> [NewickTree t]
-get_children (NTLeaf _ _) = []
-get_children (NTInterior _ ls) = ls
 
 -- Number of LEAVES contained in subtree:
 get_weight :: NewickTree StandardDecor -> Int
@@ -342,35 +314,15 @@ verify_sorted msg =
 tt :: AnnotatedTree
 tt = normalize $ annotateWLabLists $ parseNewick "" "(A,(C,D,E),B);"
 
-tt0 :: IO (Chan (), AnnotatedTree)
-tt0 = drawNewickTree "tt0" $ annotateWLabLists $ parseNewick "" "(A,(C,D,E),B);"
-
-tt2 :: G.Gr String Double
-tt2 = toGraph tt
-
-tt3 :: IO (Chan (), AnnotatedTree)
-tt3 = drawNewickTree "tt3" tt
-
 norm4 :: AnnotatedTree
 norm4 = norm "((C,D,E),B,A);"
-
-tt4 :: IO (Chan (), AnnotatedTree)
-tt4 = drawNewickTree "tt4"$ trace ("FINAL: "++ show (pPrint norm4)) $ norm4
 
 norm5 :: AnnotatedTree
 norm5 = normalize$ annotateWLabLists$ parseNewick "" "(D,E,C,(B,A));"
 
-tt5 :: IO (Chan (), AnnotatedTree)
-tt5 = drawNewickTree "tt5"$ norm5
-
-tt5' :: String
-tt5' = prettyPrint' $ dotNewickTree "norm5" 1.0 norm5
-
-ttall :: IO (Chan (), AnnotatedTree)
-ttall = do tt3; tt4; tt5
 
 ----------------------------------------------------------------------------------------------------
--- Equivalence classes:
+-- Equivalence classes on Trees:
 ----------------------------------------------------------------------------------------------------
 
 data BinEntry = BE {
@@ -437,202 +389,11 @@ int NumberOfSetBits(int i)
 
 int __builtin_popcount (unsigned int x);
 -}
-
-
-----------------------------------------------------------------------------------------------------
--- Visualization with GraphViz and FGL:
-----------------------------------------------------------------------------------------------------
-
--- First we need to be able to convert our trees to FGL graphs:
-toGraph :: AnnotatedTree -> G.Gr String Double
-toGraph tree = G.run_ G.empty $ loop tree
-  where
- loop (NTLeaf _ name) = 
-    do let str = fromLabel name
-       G.insMapNodeM str
-       return str
- loop (NTInterior (StandardDecor{sortedLabels}) ls) =
-    do let bigname = concat$ map fromLabel sortedLabels
-       names <- mapM loop ls
-       G.insMapNodeM bigname
-       mapM_ (\x -> G.insMapEdgeM (bigname, x, 0.0)) names
-       return bigname
-
--- This version uses the tree nodes themselves as graph labels.
-toGraph2 :: AnnotatedTree -> G.Gr AnnotatedTree Double
-toGraph2 tree = G.run_ G.empty $ loop tree
-  where
- loop node@(NTLeaf _  _) =  
-    do G.insMapNodeM node 
-       return ()
- loop node@(NTInterior _ ls) =
-    do mapM_ loop ls
-       G.insMapNodeM node
-       -- Edge weights as just branchLen (not bootstrap):
-       mapM_ (\x -> G.insMapEdgeM (node, x, branchLen$ get_dec x)) ls
-       return ()
-
-
--- The channel retuned will carry a single message to signal
--- completion of the subprocess.
-drawNewickTree :: String -> AnnotatedTree -> IO (Chan (), AnnotatedTree)
-drawNewickTree title tree =
-  do chan <- newChan
-     let dot = dotNewickTree title (1.0 / avg_branchlen [tree])
-	                     tree
-	 runit = do Gv.runGraphvizCanvas default_cmd dot Gv.Xlib
-		    writeChan chan ()
-     --str <- prettyPrint d
-     --putStrLn$ "Generating the following graphviz tree:\n " ++ str
-     forkIO runit
-       --do runGraphvizCanvas Dot dot Xlib; return ()
-       
-     return (chan, tree)
-
---default_cmd = TwoPi -- Totally ignores edge lengths.
-default_cmd = Gv.Neato
-
--- Show a float without scientific notation:
-myShowFloat :: Double -> String
--- showFloat weight = showEFloat (Just 2) weight ""
-myShowFloat fl = printf "%.4f" fl
-
-
-dotNewickTree :: String -> Double -> AnnotatedTree -> Gv.DotGraph G.Node
-dotNewickTree title edge_scale tree = 
-    --trace ("EDGE SCALE: " ++ show edge_scale) $
-    Gv.graphToDot myparams graph
- where 
-  graph = toGraph2 tree
-  myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
-  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
-                                Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
-  nodeAttrs :: (Int,AnnotatedTree) -> [GA.Attribute]
-  nodeAttrs (num,node) =
-    let children = get_children node in 
-    [ GA.Label$ GA.StrLabel$ pack$ 
-      concat$ map fromLabel$ sortedLabels$ get_dec node
-    , GA.Shape (if null children then {-PlainText-} GA.Ellipse else GA.PointShape)
-    , GA.Style [GA.SItem GA.Filled []]
-    ]
-
-  -- TOGGLE:
-  --  edgeAttrs (_,_,weight) = [ArrowHead noArrow, Len (weight * edge_scale + bump), GA.Label (StrLabel$ show (weight))]
-  edgeAttrs (_,_,weight) = 
-                           let draw_weight = compute_draw_weight weight edge_scale in
-                           --trace ("EDGE WEIGHT "++ show weight ++ " drawn at "++ show draw_weight) $
-			   [GA.ArrowHead Gv.noArrow,
-                            GA.Label$ GA.StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
-			   --[ArrowHead noArrow, GA.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
-			    if weight == 0.0
-			    then [GA.Color [GA.X11Color Gv.Red], GA.Len minlen]
-			    else [GA.Len draw_weight]
-  minlen = 0.7
-  maxlen = 3.0
-  compute_draw_weight w scale = 
-    let scaled = (abs w) * scale + minlen in 
-    -- Don't draw them too big or it gets annoying:
-    (min scaled maxlen)
-
-
--- This version shows the ordered/rooted structure of the normalized tree.
-dotNewickTree_debug :: String -> AnnotatedTree -> Gv.DotGraph G.Node
-dotNewickTree_debug title tree = Gv.graphToDot myparams graph
- where 
-  graph = toGraph2 tree
-  myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
-  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
-			        Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
-  nodeAttrs :: (Int,AnnotatedTree) -> [GA.Attribute]
-  nodeAttrs (num,node) =
-    let children = get_children node in 
-    [ GA.Label (if null children 
-  	        then GA.StrLabel$ pack$ concat$ map fromLabel$ sortedLabels$ get_dec node
-	        else GA.RecordLabel$ take (length children) $ 
-                                  -- This will leave interior nodes unlabeled:
-	                          map (GA.PortName . GA.PN . pack) $ map show [1..]
-		                  -- This version gives some kind of name to interior nodes:
---	                          map (\ (i,ls) -> LabelledTarget (PN$ show i) (fromLabel$ head ls)) $ 
---                                       zip [1..] (map (thd3 . get_dec) children)
-               )
-    , GA.Shape GA.Record
-    , GA.Style [GA.SItem GA.Filled []]
-    ]
-
-  edgeAttrs (num1, num2, _weight) = 
-    let node1 = fromJust$ G.lab graph num1 
-	node2 = fromJust$ G.lab graph num2 	
-	ind = fromJust$ elemIndex node2 (get_children node1)
-    in [GA.TailPort$ GA.LabelledPort (GA.PN$ pack$ show$ 1+ind) (Just GA.South)]
-
-
-
-----------------------------------------------------------------------------------------------------
--- Utilities and UNIT TESTING
-----------------------------------------------------------------------------------------------------
-
-
-cnt :: NewickTree a -> Int
-cnt (NTLeaf _ _) = 1
-cnt (NTInterior _ ls) = 1 + sum (map cnt ls)
-
-tre1 :: NewickTree DefDecor
-tre1 = parseNewick "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
-
-tre1draw :: IO (Chan (), AnnotatedTree)
-tre1draw = drawNewickTree "tre1"$ annotateWLabLists tre1
-
-tre1dot :: IO ()
-tre1dot = putStrLn$ prettyPrint' $ dotNewickTree "" 1.0 $ annotateWLabLists tre1
-
-
-norm :: String -> AnnotatedTree
-norm = norm2 . B.pack
-
-norm2 :: B.ByteString -> AnnotatedTree
-norm2 = normalize . annotateWLabLists . parseNewick "test"
-
-unitTests :: Test
-unitTests = 
-  let 
-      ntl s = NTLeaf (Nothing,0.0) (toLabel s)
-  in 
-  test 
-   [ 
-     "merge" ~: [1,2,3,4,5,6] ~=? merge [1,3,5] [2,4,6::Int]
-   , "demerge" ~: [2,4,6] ~=? demerge [1,2,3,4,5,6] [1,3,5::Int]
-   , "demerge" ~: [1,3,5] ~=? demerge [1,2,3,4,5,6] [2,4,6::Int]
-   , "annotateWLabLists" ~: 
-     --NTInterior (0.0,[A,B,C,D]) [NTLeaf (0.1,[A]) A,NTLeaf (0.2,[B]) B,NTInterior (0.5,[C,D]) [NTLeaf (0.3,[C]) C,NTLeaf (0.4,[D]) D]]
-        map toLabel ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
-    ~=? sortedLabels (get_dec (annotateWLabLists tre1))
-
-   -- Make sure that all of these normalize to the same thing.
-   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(A,(C,D,E),B);")
-   , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
-   , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
-
-   -- Here's an example from the rhizobia datasetsthat that caused my branch-sorting to fail.
-   , "normalize3" ~:  "(((BB, BJ)), (MB, ML), (RE, (SD, SM)))" 
-		 ~=? show (pPrint$ norm2 (B.pack "(((ML,MB),(RE,(SD,SM))),(BB,BJ));"))
-
--- "((BB: 2.691831, BJ: 1.179707): 0.000000, ((ML: 0.952401, MB: 1.020319): 0.000000, (RE: 2.031345, (SD: 0.180786, SM: 0.059988): 0.861187): 0.717913): 0.000000);"
-
-   , "dotConversion" ~: True ~=? 100 < length (prettyPrint' $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
    
-   , "phbin: these 3 trees should fall in the same category" ~: 
-      1 ~=? (length $ M.toList $
-             binthem [("one",   parseNewick "" "(A,(C,D,E),B);"),
- 		      ("two",   parseNewick "" "((C,D,E),B,A);"),
-		      ("three", parseNewick "" "(D,E,C,(B,A));")])
 
-   ]
-
-   
 ----------------------------------------------------------------------------------------------------
 -- Driver to put the pieces together (parse, normalize, bin)
 ----------------------------------------------------------------------------------------------------
-
 
 driver :: PhyBinConfig -> IO ()
 driver PBC{..} =
@@ -693,7 +454,7 @@ driver PBC{..} =
 	       weight = get_weight annot
 
            -- TEMPTOGGLE
-	   when False $ do putStrLn$ "DRAWING TREE";  drawNewickTree "Annotated" annot;  drawNewickTree "Normalized" normal
+	   when False $ do putStrLn$ "DRAWING TREE";  viewNewickTree "Annotated" annot;  viewNewickTree "Normalized" normal
 			   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++ show (map get_weight$ get_children normal)
 
            if not$ weight == num_taxa
@@ -704,8 +465,6 @@ driver PBC{..} =
 	    else do 
 	     when verbose$ putStr "."
 
-	     --evaluate$ deepseq$ runB newick_parser bstr
-	     --evaluate$ cnt$ runB newick_parser bstr
 	     num <- evaluate$ cnt parsed
 	     --num <- evaluate$ cnt normal
 
@@ -791,7 +550,7 @@ driver PBC{..} =
 		                  --(head$ trees bentry) )
 				  (avg_trees$ trees bentry))
 	 when (size > 1 || numbins < 100) $ do 
-	   _ <- Gv.runGraphvizCommand default_cmd dot Gv.Pdf (base i size ++ ".pdf")
+	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
 
@@ -800,24 +559,6 @@ driver PBC{..} =
     --------------------------------------------------------------------------------
     -- End driver
     --------------------------------------------------------------------------------
-
-
--- Average branch length across several trees.
-avg_branchlen :: [AnnotatedTree] -> Double
-avg_branchlen origls = fst total / snd total
-  where
-   total = sum_ls $ map sum_tree origls
-   sum_ls ls = (sum$ map fst ls, sum$ map snd ls)
-{-
-   sum_tree (NTLeaf (l,_,_) _) | l < 0 = 
-       trace ("!!! GOT NEGATIVE BRANCH LENGTH: "++ show l) $
-       (0,0)
--}
-   sum_tree (NTLeaf (StandardDecor{branchLen=0}) _)    = (0,0)
-   sum_tree (NTLeaf (StandardDecor{branchLen}) _)      = (abs branchLen,1)
-   sum_tree (NTInterior (StandardDecor{branchLen}) ls) = 
-       let (x,y) = sum_ls$ map sum_tree ls in
-       if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)
 
 {-
 nonzero_blens :: AnnotatedTree -> Int
@@ -918,9 +659,69 @@ foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
 
 
 
+
+----------------------------------------------------------------------------------------------------
+-- Utilities and UNIT TESTING
+----------------------------------------------------------------------------------------------------
+
+
+cnt :: NewickTree a -> Int
+cnt (NTLeaf _ _) = 1
+cnt (NTInterior _ ls) = 1 + sum (map cnt ls)
+
+tre1 :: NewickTree DefDecor
+tre1 = parseNewick "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+
+tre1draw :: IO (Chan (), AnnotatedTree)
+tre1draw = viewNewickTree "tre1"$ annotateWLabLists tre1
+
+tre1dot :: IO ()
+tre1dot = print $ dotNewickTree "" 1.0 $ annotateWLabLists tre1
+
+
+norm :: String -> AnnotatedTree
+norm = norm2 . B.pack
+
+norm2 :: B.ByteString -> AnnotatedTree
+norm2 = normalize . annotateWLabLists . parseNewick "test"
+
+unitTests :: Test
+unitTests = 
+  let 
+      ntl s = NTLeaf (Nothing,0.0) (toLabel s)
+  in 
+  test 
+   [ 
+     "merge" ~: [1,2,3,4,5,6] ~=? merge [1,3,5] [2,4,6::Int]
+   , "demerge" ~: [2,4,6] ~=? demerge [1,2,3,4,5,6] [1,3,5::Int]
+   , "demerge" ~: [1,3,5] ~=? demerge [1,2,3,4,5,6] [2,4,6::Int]
+   , "annotateWLabLists" ~: 
+     --NTInterior (0.0,[A,B,C,D]) [NTLeaf (0.1,[A]) A,NTLeaf (0.2,[B]) B,NTInterior (0.5,[C,D]) [NTLeaf (0.3,[C]) C,NTLeaf (0.4,[D]) D]]
+        map toLabel ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
+    ~=? sortedLabels (get_dec (annotateWLabLists tre1))
+
+   -- Make sure that all of these normalize to the same thing.
+   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(A,(C,D,E),B);")
+   , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
+   , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
+
+   -- Here's an example from the rhizobia datasetsthat that caused my branch-sorting to fail.
+   , "normalize3" ~:  "(((BB, BJ)), (MB, ML), (RE, (SD, SM)))" 
+		 ~=? show (pPrint$ norm2 (B.pack "(((ML,MB),(RE,(SD,SM))),(BB,BJ));"))
+
+-- "((BB: 2.691831, BJ: 1.179707): 0.000000, ((ML: 0.952401, MB: 1.020319): 0.000000, (RE: 2.031345, (SD: 0.180786, SM: 0.059988): 0.861187): 0.717913): 0.000000);"
+
+   , "phbin: these 3 trees should fall in the same category" ~: 
+      1 ~=? (length $ M.toList $
+             binthem [("one",   parseNewick "" "(A,(C,D,E),B);"),
+ 		      ("two",   parseNewick "" "((C,D,E),B,A);"),
+		      ("three", parseNewick "" "(D,E,C,(B,A));")])
+
+   ]
+
 --------------------------------------------------------------------------------
 -- No longer used:
-
+--------------------------------------------------------------------------------
 
 -- runPr :: Show a => Parser a -> String -> IO ()
 -- runPr prs str = print (run prs str)
