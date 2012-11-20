@@ -16,14 +16,23 @@ import           Control.Concurrent
 import           System.Environment
 import           System.Console.GetOpt
 import           System.Exit
+import           Test.HUnit (runTestTT)
 
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
+import Bio.Phylogeny.PhyBin.CoreTypes
+         -- (NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..),
+         --  driver, parseNewick,
+         --  binthem, normalize, name_hack, annotateWLabLists, map_labels, set_dec,
+         --  drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
+         --  run_tests)
+
 import Bio.Phylogeny.PhyBin
          (NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..),
           driver, parseNewick,
           binthem, normalize, name_hack, annotateWLabLists, map_labels, set_dec,
-          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
-          run_tests)
+          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label
+          )
+
 import Version
 
 ----------------------------------------------------------------------------------------------------
@@ -119,6 +128,9 @@ usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
 defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
 
+-- allUnitTests = unitTests ++
+allUnitTests = error "finish allunittests"
+
 main = 
   do argv <- getArgs 
 
@@ -132,8 +144,8 @@ main =
 	   Verbose -> return cfg { verbose= True } 
 	   Version -> do putStrLn$ "phybin version "++phybin_version; exitSuccess
 
-	   SelfTest -> do run_tests; exitSuccess
-
+	   SelfTest -> do runTestTT allUnitTests; exitSuccess
+                          
 	   Output s -> return cfg { output_dir= s }
 
 	   NumTaxa n -> return cfg { num_taxa= n }

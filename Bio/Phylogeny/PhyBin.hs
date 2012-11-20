@@ -9,7 +9,7 @@ module Bio.Phylogeny.PhyBin
          driver, parseNewick,
          binthem, normalize, annotateWLabLists, map_labels, set_dec,     
          drawNewickTree, dotNewickTree_debug, toLabel, fromLabel, Label,
-         run_tests
+         unitTests
        )
        where
 
@@ -47,75 +47,21 @@ import           Data.Graph.Inductive as G  hiding (run)
 --import Data.GraphViz        as Gv hiding (Label, toLabel) 
 import           Data.GraphViz        as Gv hiding (parse, toLabel)
 
---import Data.Graph.Inductive.Query.DFS
--- import qualified Data.GraphViz.Attributes.Complete as Gattr
--- import Data.GraphViz.Attributes.Complete
---        (PortName, Label(RecordLabel,StrLabel), Shape, Attribute(Style,TailPort,ArrowHead,Len),
---         StyleItem(SItem), StyleName(Filled), PortPos(LabelledPort),
---         Shape, Color(X11Color), RecordField(PortName), PortName(PN,Color), CmopassPoint(South))
-
 import qualified Data.GraphViz.Attributes.Complete as Gattr
 import           Data.GraphViz.Attributes.Complete hiding (Label)
+import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
+import           Debug.Trace
 
-
-import Text.PrettyPrint.HughesPJClass hiding (char, Style)
-
-import Debug.Trace
-
+import Bio.Phylogeny.PhyBin.CoreTypes
+import Bio.Phylogeny.PhyBin.Parser (newick_parser)
 
 -- TEMP / HACK:
 prettyPrint' :: Show a => a -> String
 prettyPrint' = show
 
-----------------------------------------------------------------------------------------------------
--- Type definitions
-----------------------------------------------------------------------------------------------------
-
-type BranchLen = Double
-
--- | Even though the Newick format allows it, here we ignore interior node
---   labels. (They are not commonly used.)
-data NewickTree a = 
-   NTLeaf     a Label
- | NTInterior a [NewickTree a]
- deriving (Show, Eq, Ord)
-
-{-
--- [2010.09.22] Disabling:
-instance NFData Atom where
-  rnf a = rnf (fromAtom a :: Int)
-
-instance NFData a => NFData (NewickTree a) where
-  rnf (NTLeaf l n)      = rnf (l,n)
-  rnf (NTInterior l ls) = rnf (l,ls)
--}
-
-instance Pretty (NewickTree dec) where 
- pPrint (NTLeaf _ name)   = text (fromLabel name)
- pPrint (NTInterior _ ls) = 
-     --parens$ commasep ls
-     (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
 
 
--- | Display a tree WITH the bootstrap and branch lengths.
-displayTree :: NewickTree DefDecor -> Doc
-displayTree (NTLeaf (Nothing,_) name)   = text (fromLabel name)
-displayTree (NTLeaf dec name)   = error "WEIRD -- why did a leaf node have a bootstrap value?"
-displayTree (NTInterior (bootstrap,_) ls) = 
-   case bootstrap of
-     Nothing -> base
-     Just val -> base <> text ":[" <> text (show val) <> text "]"
- where
-   base = parens$ sep$ map_but_last (<>text",") $ map pPrint ls
 
-
--- Experimental: toggle this to change the representation of labels:
-----------------------------------------
---type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
-----------------------------------------
-type Label = String; (toLabel, fromLabel) = (id, id)
-----------------------------------------
-fromLabel :: Label -> String
 
 ----------------------------------------------------------------------------------------------------
 -- OS specific bits:
@@ -141,8 +87,13 @@ fromLabel :: Label -> String
 -- #endif
 
 -- Here we ASSUME it exists, then these functions are good enough:
+is_regular_file :: FilePath -> IO Bool
 is_regular_file = doesFileExist
+
+is_directory :: FilePath -> IO Bool
 is_directory = doesDirectoryExist 
+
+file_exists :: FilePath -> IO Bool
 file_exists path = 
   do f <- doesFileExist path
      d <- doesDirectoryExist path
@@ -153,16 +104,15 @@ file_exists path =
 ----------------------------------------------------------------------------------------------------
 
 --commacat ls = hcat (intersperse (text ", ") $ map pPrint ls)
+commasep :: Pretty a => [a] -> Doc
 commasep ls = sep (intersperse (text ", ") $ map pPrint ls)
-
-map_but_last fn [] = []
-map_but_last fn [h] = [h]
-map_but_last fn (h:t) = fn h : map_but_last fn t
 
 fst3 (a,_,_) = a
 snd3 (_,b,_) = b
 thd3 (_,_,c) = c
 
+
+merge :: Ord a => [a] -> [a] -> [a]
 merge [] ls = ls
 merge ls [] = ls
 merge l@(a:b) r@(x:y) = 
@@ -171,103 +121,23 @@ merge l@(a:b) r@(x:y) =
   else x : merge y l 
 
 -- Set subtraction for sorted lists:
+demerge :: (Ord a, Show a) => [a] -> [a] -> [a]
 demerge ls [] = ls
 demerge [] ls = error$ "demerge: first list did not contain all of second, remaining: " ++ show ls
-demerge l@(a:b) r@(x:y) = 
+demerge (a:b) r@(x:y) = 
   case a `compare` x of
    EQ -> demerge b y
    LT -> a : demerge b r 
    GT -> error$ "demerge: element was missing from first list: "++ show x
 
-maybeCons Nothing  ls = ls
-maybeCons (Just x) ls = x : ls
+-- maybeCons :: Maybe a -> [a] -> [a]
+-- maybeCons Nothing  ls = ls
+-- maybeCons (Just x) ls = x : ls
 
-maybeInsert fn Nothing  ls = ls
+maybeInsert :: (a -> a -> Ordering) -> Maybe a -> [a] -> [a]
+maybeInsert _  Nothing  ls = ls
 maybeInsert fn (Just x) ls = insertBy fn x ls
---maybeInsert  Nothing  ls = ls
---maybeInsert  (Just x) ls = insert (x) ls -- Relies on ORD
 
-----------------------------------------------------------------------------------------------------
--- Newick file format parser definitions:
-----------------------------------------------------------------------------------------------------
-
--- | The default decorator for NewickTrees contains BOOTSTRAP and BRANCHLENGTH.
---   The bootstrap values, if present, will range in [0..100]
-type DefDecor = (Maybe Int, BranchLen)
-
-tag l s =
-  case s of 
-    NTLeaf _ n      -> NTLeaf l n
-    NTInterior _ ls -> NTInterior l ls
-
--- | This parser ASSUMES that whitespace has been prefiltered from the input.
-newick_parser :: Parser (NewickTree DefDecor)
-newick_parser = 
-   do x <- subtree
-      -- Get the top-level metadata:
-      l <- branchMetadat
-      char ';'
-      return$ tag l x
-
-subtree :: Parser (NewickTree DefDecor)
-subtree = internal <|> leaf
-
-defaultMeta = (Nothing,0.0)
-
-leaf :: Parser (NewickTree DefDecor)
-leaf = do n<-name; return$ NTLeaf defaultMeta (toLabel n)
-
-internal :: Parser (NewickTree DefDecor)
-internal = do char '('       
-	      bs <- branchset
-	      char ')'       
-              nm <- name -- IGNORED
-              return$ NTInterior defaultMeta bs
-
-branchset :: Parser [NewickTree DefDecor]
-branchset =
-    do b <- branch <?> "at least one branch"
-       rest <- option [] $ try$ do char ','; branchset
-       return (b:rest)
-
-branch :: Parser (NewickTree DefDecor)
-branch = do s<-subtree; l<-branchMetadat; 
-	    return$ tag l s
-
--- If the length is omitted, it is implicitly zero.
-branchMetadat :: Parser DefDecor    
-branchMetadat = option defaultMeta $ do
-    char ':'
-    n <- (try sciNotation <|> number)
-    -- IF the branch length succeeds then we go for the bracketed bootstrap value also:
-    bootstrap <- option Nothing $ do
-      char '['
-      s <- many1 digit
-      char ']'
-      return (Just (read s))
-    return (bootstrap,n)
-
--- | Parse a normal, decimal number.
-number :: Parser Double
-number = 
-  do sign <- option "" $ string "-"
-     fst <- many1 digit
-     snd <- option "0" $ try$ do char '.'; many1 digit
-     return (read (sign ++ fst++"."++snd) :: Double)
-
--- | Parse a number in scientific notation.
-sciNotation :: Parser Double
-sciNotation =
-  do coeff <- do fst <- many1 digit
-                 snd <- option "0" $ try$ do char '.'; many1 digit
-                 return $ fst++"."++snd
-     char 'e'
-     sign  <- option "" $ string "-"
-     expon <- many1 digit
-     return (read (coeff++"e"++sign++expon))
-
-name :: Parser String
-name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 
 
 ----------------------------------------------------------------------------------------------------
@@ -286,25 +156,6 @@ name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 -- A common type of tree is "AnnotatedTree", which contains the standard decorator.
 type AnnotatedTree = NewickTree StandardDecor
 
--- | The standard decoration includes:
--- 
---  (1) branch length from parent to "this" node
---  (2) bootstrap values for the node
--- 
---  (3) subtree weights for future use
---      (defined as number of LEAVES, not counting intermediate nodes)
---  (4) sorted lists of labels for symmetry breaking
-data StandardDecor = StandardDecor {
-  branchLen     :: BranchLen,
-  bootStrap     :: Maybe Int,
-
-  -- The rest of these are used by the computations below.  These are
-  -- cached (memoized) values that could be recomputed:
-  ----------------------------------------
-  subtreeWeight :: Int,
-  sortedLabels  :: [Label]
- }
- deriving (Show,Read,Eq,Ord)
 
 -- annotateWLabLists :: NewickTree BranchLen -> AnnotatedTree
 annotateWLabLists :: NewickTree DefDecor -> AnnotatedTree
@@ -321,12 +172,10 @@ annotateWLabLists tr = case tr of
 deAnnotate :: AnnotatedTree -> NewickTree DefDecor 
 deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
 
-instance Functor NewickTree where 
-   fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
-   fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
 
 -- | Apply a function to all the *labels* (leaf names) in a tree.
-map_labels fn (NTLeaf     dec lab) = NTLeaf dec $ fn lab
+map_labels :: (Label -> Label) -> NewickTree a -> NewickTree a
+map_labels fn (NTLeaf     dec lbl) = NTLeaf dec $ fn lbl
 map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
 
 -- -- | Apply a function to all the decorations in a tre.
@@ -334,24 +183,30 @@ map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
 -- map_dec fn (NTLeaf     dec lab) = NTLeaf (fn dec) lab
 -- map_dec fn (NTInterior dec ls)  = NTInterior (fn dec) $ map (map_dec fn) ls
 
-all_labels (NTLeaf     _ lab) = [lab]
+all_labels :: NewickTree t -> [Label]
+all_labels (NTLeaf     _ lbl) = [lbl]
 all_labels (NTInterior _ ls)  = concat$ map all_labels ls
 
+get_dec :: NewickTree t -> t
 get_dec (NTLeaf     dec _) = dec
 get_dec (NTInterior dec _) = dec
 
 -- Set all the decorations to a constant:
+set_dec :: b -> NewickTree a -> NewickTree b
 set_dec d = fmap (const d)
 --set_dec d (NTLeaf _ x) = NTLeaf d x
 --set_dec d (NTInterior _ ls) = NTInterior d $ map (set_dec d) ls
 
+get_children :: NewickTree t -> [NewickTree t]
 get_children (NTLeaf _ _) = []
 get_children (NTInterior _ ls) = ls
 
 -- Number of LEAVES contained in subtree:
+get_weight :: NewickTree StandardDecor -> Int
 get_weight = subtreeWeight . get_dec
 
 -- Sorted list of leaf labels contained in subtree
+get_label_list :: NewickTree StandardDecor -> [Label]
 get_label_list   = sortedLabels . get_dec
 
 
@@ -367,6 +222,7 @@ subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =
   StandardDecor l1 ((-) <$> bs1 <*> bs2) (w1-w2) (demerge sorted1 sorted2)
 
 -- Turn on for extra invariant checking:
+debug :: Bool
 debug = False
 	
 --------------------------------------------------------------------------------
@@ -378,6 +234,7 @@ debug = False
 --compare_nodes :: AnnotatedTree -> AnnotatedTree -> Ordering
 -- Our sorting criteria for the children of interior nodes:
 
+compare_childtrees :: AnnotatedTree -> AnnotatedTree -> Ordering
 compare_childtrees node1 node2 = 
     case (subtreeWeight $ get_dec node1) `compare` (subtreeWeight $ get_dec node2) of 
      -- Comparisons on atoms cause problems WRT to determinism between runs if parallelism is introduced.
@@ -414,23 +271,23 @@ normalize tree = snd$ loop tree Nothing
   --    1. new node
   --    3. the best candidate root anywhere under this subtree
   loop :: AnnotatedTree -> Maybe AnnotatedTree -> (AnnotatedTree, AnnotatedTree)
-  loop node context  = case node of
-    NTLeaf dec@(StandardDecor l _ w sorted) name -> 
+  loop node ctxt  = case node of
+    NTLeaf (StandardDecor _ _ w sorted) _name -> 
 	(node, 
 	 -- If the leaf becomes the root... we could introduce another node:
-	 NTInterior (add_context (StandardDecor 0 Nothing w sorted) context) $
-	            (verify_sorted "1" id$ maybeInsert compare_childtrees context [node])
+	 NTInterior (add_context (StandardDecor 0 Nothing w sorted) ctxt) $
+	            (verify_sorted "1" id$ maybeInsert compare_childtrees ctxt [node])
 
 	 -- It may be reasonable to not support leaves becoming root.. that changes the number of nodes!
 	            --error "normalize: leaf becoming root not currently supported."
 	)
     
-    NTInterior dec@(StandardDecor l _ w _) ls -> 
+    NTInterior dec ls -> 
      let 
          -- If this node becomes the root, the parent becomes one of our children:
          inverted = NTInterior inverted_dec inverted_children
-	 inverted_dec      = add_context dec context
-         inverted_children = verify_sorted "2" id$ maybeInsert compare_childtrees context newchildren
+	 inverted_dec      = add_context dec ctxt
+         inverted_children = verify_sorted "2" id$ maybeInsert compare_childtrees ctxt newchildren
 
 	 newchildren = --trace ("SORTED "++ show (map (get_label_list . fst) sorted)) $
 		       map fst sorted
@@ -722,7 +579,10 @@ runB file p input = case (parse p "" input) of
 	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
 		 Right x  -> x
 
+runPr :: Show a => Parser a -> String -> IO ()
 runPr prs str = print (run prs str)
+
+run :: Show a => Parser a -> String -> a
 run p input = runB "<unknown>" p (B.pack input)
 
 errortest :: t -> IO ()
@@ -736,52 +596,36 @@ cnt :: NewickTree a -> Int
 cnt (NTLeaf _ _) = 1
 cnt (NTInterior _ ls) = 1 + sum (map cnt ls)
 
-tr1 = run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
-tr1draw = drawNewickTree "tr1"$ annotateWLabLists tr1
-tr1dot = putStrLn$ prettyPrint' $ dotNewickTree "" 1.0 $ annotateWLabLists tr1
+tre1 :: NewickTree DefDecor
+tre1 = run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+
+tre1draw :: IO (Chan (), AnnotatedTree)
+tre1draw = drawNewickTree "tre1"$ annotateWLabLists tre1
+
+tre1dot :: IO ()
+tre1dot = putStrLn$ prettyPrint' $ dotNewickTree "" 1.0 $ annotateWLabLists tre1
 
 
+norm :: String -> AnnotatedTree
 norm = normalize . annotateWLabLists . run newick_parser
+
+norm2 :: B.ByteString -> AnnotatedTree
 norm2 = normalize . annotateWLabLists . parseNewick "test"
-tests = 
+
+unitTests :: Test
+unitTests = 
   let 
       ntl s = NTLeaf (Nothing,0.0) (toLabel s)
   in 
   test 
-   [ "test name"   ~: "foo" ~=?  run name "foo"
-   , "test number" ~:  3.3  ~=?  run number "3.3"
-   , "test number" ~:  3.0  ~=?  run number "3"
-   , "test number" ~:  -3.0 ~=?  run number "-3"
-
-   , "leaf"     ~: ntl "A" ~=?  run leaf    "A"
-   , "subtree"  ~: ntl "A" ~=?  run subtree "A"
-
-   -- These are not allowed:
-   , "null branchset" ~: errortest$ run branchset ""
-
-   , "internal" ~: NTInterior (Nothing,0.0) [ntl "A"] ~=?  run internal "(A);"
-
-   , "example: no nodes are named"  ~: NTInterior (Nothing,0)
-                                         [ntl "", ntl "", NTInterior (Nothing,0) [ntl "", ntl ""]]
-				   ~=? run newick_parser "(,,(,));"
-   , "example: leaf nodes are named" ~: 6 ~=?  cnt (run newick_parser "(A,B,(C,D));")
-   , "example: all nodes are named"  ~: 6 ~=?  cnt (run newick_parser "(A,B,(C,D)E)F;")
-
-   , "example: all but root node have a distance to parent"  ~: 6 ~=? cnt (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5);")
-   , "example: all have a distance to parent"              ~: 6 ~=? cnt (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5):0.6;")
-   , "example: distances and leaf names (popular)"         ~: 6 ~=? cnt tr1
-   , "example: distances and all names"                    ~: 6 ~=? cnt (run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;")
-   , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? cnt (run newick_parser "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
-
-   , "merge" ~: [1,2,3,4,5,6] ~=? merge [1,3,5] [2,4,6]
-
-   , "demerge" ~: [2,4,6] ~=? demerge [1,2,3,4,5,6] [1,3,5]
-   , "demerge" ~: [1,3,5] ~=? demerge [1,2,3,4,5,6] [2,4,6]
-
+   [ 
+     "merge" ~: [1,2,3,4,5,6] ~=? merge [1,3,5] [2,4,6::Int]
+   , "demerge" ~: [2,4,6] ~=? demerge [1,2,3,4,5,6] [1,3,5::Int]
+   , "demerge" ~: [1,3,5] ~=? demerge [1,2,3,4,5,6] [2,4,6::Int]
    , "annotateWLabLists" ~: 
      --NTInterior (0.0,[A,B,C,D]) [NTLeaf (0.1,[A]) A,NTLeaf (0.2,[B]) B,NTInterior (0.5,[C,D]) [NTLeaf (0.3,[C]) C,NTLeaf (0.4,[D]) D]]
         map toLabel ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
-    ~=? sortedLabels (get_dec (annotateWLabLists tr1))
+    ~=? sortedLabels (get_dec (annotateWLabLists tre1))
 
    -- Make sure that all of these normalize to the same thing.
    , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(A,(C,D,E),B);")
@@ -794,9 +638,7 @@ tests =
 
 -- "((BB: 2.691831, BJ: 1.179707): 0.000000, ((ML: 0.952401, MB: 1.020319): 0.000000, (RE: 2.031345, (SD: 0.180786, SM: 0.059988): 0.861187): 0.717913): 0.000000);"
 
-
    , "dotConversion" ~: True ~=? 100 < length (prettyPrint' $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
-
    
    , "phbin: these 3 trees should fall in the same category" ~: 
       1 ~=? (length $ M.toList $
@@ -806,34 +648,10 @@ tests =
 
    ]
 
-run_tests = runTestTT tests
-t = run_tests
-
    
 ----------------------------------------------------------------------------------------------------
 -- Driver to put the pieces together (parse, normalize, bin)
 ----------------------------------------------------------------------------------------------------
-
--- Due to the number of configuration options for the driver, we pack them into a record:
-data PhyBinConfig = 
-  PBC { verbose :: Bool
-      , num_taxa :: Int
-      , name_hack :: Label -> Label
-      , output_dir :: String
-      , inputs :: [String]
-      , do_graph :: Bool
-      , do_draw :: Bool
-      }
-
-default_phybin_config = 
- PBC { verbose = False
-      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually.)"
-      , name_hack = id -- Default, no transformation of leaf-labels
-      , output_dir = "./"
-      , inputs = []
-      , do_graph = False
-      , do_draw = False
-     }
 
 
 driver :: PhyBinConfig -> IO ()
@@ -949,7 +767,7 @@ driver PBC{..} =
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
 
-    forM_ binlist $ \ (len, tr, _) -> do
+    forM_ binlist $ \ (len, _, _) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           -- putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
           putStrLn$ "  * members: "++ show len
@@ -958,12 +776,12 @@ driver PBC{..} =
 	      show (sep $ map (text . fromLabel) $ S.toList taxa)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
-    forM_ (zip [1..] binlist) $ \ (i, (size, tr, bentry)) -> do
+    forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, bentry)) -> do
        --putStrLn$ ("  WRITING " ++ combine output_dir ("bin" ++ show i ++"_"++ show size ++".txt"))
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
-       writeFile (base i size ++".tr")  (show (displayTree$ deAnnotate$ avg_trees$ trees bentry) ++ ";\n")
+       writeFile (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate$ avg_trees$ trees bentry) ++ ";\n")
 
 --       writeFile (base i size ++".rawtree")  (show tr ++ ";\n") -- TempToggle
 
@@ -984,7 +802,7 @@ driver PBC{..} =
     putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip [1..] binlist) $ \ (i, (size, tr, bentry)) -> do
+      forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, bentry)) -> do
          let 
              dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
 		                 --(annotateWLabLists$ fmap (const 0) tr)
@@ -993,7 +811,7 @@ driver PBC{..} =
 		                  --(head$ trees bentry) )
 				  (avg_trees$ trees bentry))
 	 when (size > 1 || numbins < 100) $ do 
-	   runGraphvizCommand default_cmd dot Pdf (base i size ++ ".pdf")
+	   _ <- runGraphvizCommand default_cmd dot Pdf (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
 
@@ -1006,9 +824,9 @@ driver PBC{..} =
 
 -- Average branch length across several trees.
 avg_branchlen :: [AnnotatedTree] -> Double
-avg_branchlen ls = fst total / snd total
+avg_branchlen origls = fst total / snd total
   where
-   total = sum_ls $ map sum_tree ls
+   total = sum_ls $ map sum_tree origls
    sum_ls ls = (sum$ map fst ls, sum$ map snd ls)
 {-
    sum_tree (NTLeaf (l,_,_) _) | l < 0 = 
@@ -1034,12 +852,12 @@ nonzero_blens node =
 -- Come up with an average tree from a list of isomorphic trees.
 -- This comes up with some blending of edge lengths.
 avg_trees :: [AnnotatedTree] -> AnnotatedTree
-avg_trees ls = --summed -- TEMPTOGGLE -- show the sum/count directy...
+avg_trees origls = 
      fmap unlift $ 
      foldIsomorphicTrees (foldl1 sumthem) $ 
-     map (fmap lift) ls     
+     map (fmap lift) origls     
   where
-    totalCount = fromIntegral$ length ls
+    totalCount = fromIntegral$ length origls
 
     -- Here we do the actual averaging:
     unlift :: TempDecor -> StandardDecor
@@ -1073,10 +891,10 @@ type TempDecor = (Double, (Int, Int), Int, [Label])
 -- is an error to apply this function.
 foldIsomorphicTrees :: ([a] -> b) -> [NewickTree a] -> NewickTree b
 foldIsomorphicTrees _ [] = error "foldIsomorphicTrees: empty list of input trees"
-foldIsomorphicTrees fn ls@(hd:_)= undefined
+foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
  where
    -- Preserve the input order:
-   all = foldr consTrees (fmap (const []) hd) ls
+   horiztrees = foldr consTrees (fmap (const []) hd) ls
    -- We use the tree datatype itself as the intermediate data
    -- structure.  This is VERY allocation-expensive, it would be
    -- possible to trade compute for allocation here:
@@ -1089,6 +907,7 @@ foldIsomorphicTrees fn ls@(hd:_)= undefined
     _ -> error "foldIsomorphicTrees: difference in tree shapes"
     
 
+bump :: Double
 bump = 0.00001 -- for DIRTY HACKS
 
 {- 
