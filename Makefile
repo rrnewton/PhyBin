@@ -86,7 +86,6 @@ newbatch: rickettsia rickettsiales wolbachia
 
 # BRANCHTHRESH=0.01
 BRANCHTHRESH=0.05
-
 PHYBIN= ./phybin.exe -b $(BRANCHTHRESH) -g
 
 #------------------------------------------------------------
@@ -116,7 +115,9 @@ wolbachia:     $(LOCALSETS)/Wolbachia/renaming_table.txt
 $(LOCALSETS)/Wolbachia/renaming_table.txt: $(LOCALSETS)/Wolbachia/Wolbachia_orthologs.txt
 	runghc stripTable.hs $^ > $@
 
-vary_branchlen:
+
+
+vary_branchlen: $(LOCALSETS)/Rickettsia/renaming_table.txt $(LOCALSETS)/Rickettsiales/renaming_table.txt $(LOCALSETS)/Wolbachia/renaming_table.txt
 	./vary_branchlen.sh 15 Rickettsia
 	./vary_branchlen.sh 29 Rickettsiales
 	./vary_branchlen.sh  4 Wolbachia

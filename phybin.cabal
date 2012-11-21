@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.1.2.3
+Version:        0.1.2.4
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -7,7 +7,10 @@ Author:			Ryan Newton <rrnewton@gmail.com>
 Maintainer:		Ryan Newton <rrnewton@gmail.com>
 
 
-
+-- Version history:
+-- 0.1.2   -- first significant release
+-- 0.1.2.1 -- 
+-- 0.1.2.4 -- new release, several new features
 
 -- homepage: http://code.haskell.org/phybin
 homepage: http://people.csail.mit.edu/newton/phybin/
