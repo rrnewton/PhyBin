@@ -8,8 +8,11 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        (
          NewickTree(..), displayDefaultTree,
          DefDecor, StandardDecor(..), treeSize, numLeaves,
-         get_dec, set_dec, get_children, avg_branchlen,
+         get_dec, set_dec, get_children, 
          map_labels, all_labels, foldIsomorphicTrees,
+
+         -- Utilities specific to StandardDecor:
+         avg_branchlen, get_bootstraps,
          
          PhyBinConfig(..), default_phybin_config,
 
@@ -17,6 +20,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        )
        where
 
+import Data.Maybe (maybeToList)
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 ----------------------------------------------------------------------------------------------------
@@ -203,6 +207,11 @@ avg_branchlen origls = fst total / snd total
        let (x,y) = sum_ls$ map sum_tree ls in
        if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)
 
+-- | Retrieve all the bootstraps values actually present in a tree.
+get_bootstraps :: NewickTree StandardDecor -> [Int]
+get_bootstraps (NTLeaf (StandardDecor{bootStrap}) _) = maybeToList bootStrap
+get_bootstraps (NTInterior (StandardDecor{bootStrap}) ls) =
+  maybeToList bootStrap ++ concatMap get_bootstraps ls
 
 -- | Apply a function to all the *labels* (leaf names) in a tree.
 map_labels :: (Label -> Label) -> NewickTree a -> NewickTree a

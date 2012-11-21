@@ -361,7 +361,26 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	warnings = concat $ map thd3 results
 	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
 
-    putStrLn$ "  "++show numbins++" bins found.  Bin sizes, excluding singletons:"
+        binsizes = map fst3 binlist
+
+    putStrLn$ " [outcome] "++show numbins++" bins found, "++show (length$ takeWhile (>1) binsizes)
+             ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
+    putStrLn$"  ALL bin sizes, excluding singletons:"
+    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, BE{trees})) -> do
+       when (len > 1) $ -- Omit that long tail of single element classes...
+          -- putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
+
+          -- Print all on one line:
+          -- putStrLn$"  * bin#"++show ind++", members "++ show len++
+          --          ", avg bootstraps "++show (get_bootstraps$ avg_trees trees)++
+          --          ", all: "++show (filter (not . null) $ 
+          --                           map get_bootstraps trees)
+
+          putStrLn$show$ 
+           hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
+                 vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees trees)++", "),
+                       text "all: " <> pPrint (filter (not . null) $ map get_bootstraps trees)]]
+
 
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
@@ -375,11 +394,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
-
-    forM_ binlist $ \ (len, _, _) -> do
-       when (len > 1) $ -- Omit that long tail of single element classes...
-          -- putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
-          putStrLn$ "  * members: "++ show len
 
     putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):\n"++ 
 	      show (sep $ map (text . fromLabel) $ S.toList taxa)
