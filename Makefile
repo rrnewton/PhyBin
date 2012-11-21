@@ -114,6 +114,10 @@ wolbachia:     $(LOCALSETS)/Wolbachia/renaming_table.txt
 $(LOCALSETS)/Wolbachia/renaming_table.txt: $(LOCALSETS)/Wolbachia/Wolbachia_orthologs.txt
 	runghc stripTable.hs $^ > $@
 
+vary_branchlen:
+	./vary_branchlen.sh 15 Rickettsia
+	./vary_branchlen.sh 29 Rickettsiales
+	./vary_branchlen.sh  4 Wolbachia
 
 temp:
 	./phybin.exe ~/newton_and_newton_local/datasets/rhizobia/gde/*.dnd -o temp -p 2 -n 7 

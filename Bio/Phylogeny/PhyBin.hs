@@ -385,15 +385,15 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	      show (sep $ map (text . fromLabel) $ S.toList taxa)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
-    forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, bentry)) -> do
+    let avgs = map (avg_trees . trees . thd3) binlist
+    forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
        --putStrLn$ ("  WRITING " ++ combine output_dir ("bin" ++ show i ++"_"++ show size ++".txt"))
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
-       let avg = avg_trees$ trees bentry 
        when debug$ do
-         writeFile (base i size ++".dbg") (show (pPrint (avg_trees$ trees bentry)) ++ "\n")
-       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate$ avg) ++ ";\n")
+         writeFile (base i size ++".dbg") (show (pPrint avgTree) ++ "\n")
+       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate$ avgTree) ++ ";\n")
 
     when (not$ null warnings) $
 	writeFile (combine output_dir "bin_WARNINGS.txt")
@@ -412,14 +412,14 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, bentry)) -> do
+      forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
 	 when (size > 1 || numbins < 100) $ do 
            let dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
                                    --(annotateWLabLists$ fmap (const 0) tr)
                                    -- TEMP FIXME -- using just ONE representative tree:
                                    ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
                                      --(head$ trees bentry) 
- 				    (avg_trees$ trees bentry) )
+ 				    avgTree )
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
