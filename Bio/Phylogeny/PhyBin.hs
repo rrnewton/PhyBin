@@ -368,14 +368,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     putStrLn$"  ALL bin sizes, excluding singletons:"
     forM_ (zip [1..] binlist) $ \ (ind, (len, tr, BE{trees})) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
-          -- putStrLn$ "  "++ show (pPrint tr) ++" members: "++ show len
-
-          -- Print all on one line:
-          -- putStrLn$"  * bin#"++show ind++", members "++ show len++
-          --          ", avg bootstraps "++show (get_bootstraps$ avg_trees trees)++
-          --          ", all: "++show (filter (not . null) $ 
-          --                           map get_bootstraps trees)
-
           putStrLn$show$ 
            hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
                  vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees trees)++", "),
@@ -396,7 +388,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
 
     putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):\n"++ 
-	      show (sep $ map (text . fromLabel) $ S.toList taxa)
+	      show (nest 2 $ sep $ map (text . fromLabel) $ S.toList taxa)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . trees . thd3) binlist
