@@ -5,12 +5,14 @@ default: haskell
 
 all: find_tree_matches.exe haskell
 
+GHC=ghc-7.4.2
+
 haskell:
-	ghc -O2 --make Main.hs -o phybin.exe
+	$(GHC) -O2 --make Main.hs -o phybin.exe
 	strip phybin.exe
 
 win:
-	ghc -DWIN32 --make Bio/Phylogeny/PhyBin/Main.hs -o phybin.exe
+	$(GHC) -DWIN32 --make Bio/Phylogeny/PhyBin/Main.hs -o phybin.exe
 
 release: haskell
 	upx phybin.exe
