@@ -82,11 +82,16 @@ legionella:
 # Newer ones [2012.11.19]:
 newbatch: rickettsia rickettsiales wolbachia
 
+# BRANCHTHRESH=0.01
+BRANCHTHRESH=0.05
+
+PHYBIN= ./phybin.exe -b $(BRANCHTHRESH) -g
+
 #------------------------------------------------------------
 rickettsia:    $(LOCALSETS)/Rickettsia/renaming_table.txt
 	rm -rf $(LOCALSETS)/Rickettsia/phybin_outputs
 	mkdir  $(LOCALSETS)/Rickettsia/phybin_outputs
-	./phybin.exe -g -n 15 -m $(LOCALSETS)/Rickettsia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsia/phybin_output/ $(LOCALSETS)/Rickettsia/final_trees/*BranchLab*.out 
+	$(PHYBIN) -n 15 -m $(LOCALSETS)/Rickettsia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsia/phybin_output/ $(LOCALSETS)/Rickettsia/final_trees/*BranchLab*.out 
 
 $(LOCALSETS)/Rickettsia/renaming_table.txt: $(LOCALSETS)/Rickettsia/Rickettsia_orthololgs.txt
 	runghc stripTable.hs $^ > $@
@@ -95,7 +100,7 @@ $(LOCALSETS)/Rickettsia/renaming_table.txt: $(LOCALSETS)/Rickettsia/Rickettsia_o
 rickettsiales: $(LOCALSETS)/Rickettsiales/renaming_table.txt
 	rm -rf $(LOCALSETS)/Rickettsiales/phybin_outputs
 	mkdir  $(LOCALSETS)/Rickettsiales/phybin_outputs
-	./phybin.exe -g -n 29 -m $(LOCALSETS)/Rickettsiales/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsiales/phybin_output/ $(LOCALSETS)/Rickettsiales/final_trees/*BranchLab*.out 
+	$(PHYBIN) -n 29 -m $(LOCALSETS)/Rickettsiales/renaming_table.txt -s '_'  -o $(LOCALSETS)/Rickettsiales/phybin_output/ $(LOCALSETS)/Rickettsiales/final_trees/*BranchLab*.out 
 
 $(LOCALSETS)/Rickettsiales/renaming_table.txt: $(LOCALSETS)/Rickettsiales/Rickettsiales_orthologs.txt
 	runghc stripTable.hs $^ > $@
@@ -104,7 +109,7 @@ $(LOCALSETS)/Rickettsiales/renaming_table.txt: $(LOCALSETS)/Rickettsiales/Ricket
 wolbachia:     $(LOCALSETS)/Wolbachia/renaming_table.txt
 	rm -rf $(LOCALSETS)/Wolbachia/phybin_outputs
 	mkdir  $(LOCALSETS)/Wolbachia/phybin_outputs
-	./phybin.exe -g -n 4 -m $(LOCALSETS)/Wolbachia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Wolbachia/phybin_output/ $(LOCALSETS)/Wolbachia/final_trees/*BranchLab*.out 
+	$(PHYBIN) -n 4 -m $(LOCALSETS)/Wolbachia/renaming_table.txt -s '_'  -o $(LOCALSETS)/Wolbachia/phybin_output/ $(LOCALSETS)/Wolbachia/final_trees/*BranchLab*.out 
 
 $(LOCALSETS)/Wolbachia/renaming_table.txt: $(LOCALSETS)/Wolbachia/Wolbachia_orthologs.txt
 	runghc stripTable.hs $^ > $@

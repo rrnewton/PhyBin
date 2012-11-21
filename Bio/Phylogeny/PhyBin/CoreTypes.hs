@@ -68,7 +68,7 @@ displayDefaultTree (NTInterior (bootstrap,_) ls) =
      Nothing -> base
      Just val -> base <> text ":[" <> text (show val) <> text "]"
  where
-   base = parens$ sep$ map_but_last (<>text",") $ map pPrint ls
+   base = parens$ sep$ map_but_last (<>text",") $ map displayDefaultTree ls
 
 
 ----------------------------------------------------------------------------------------------------

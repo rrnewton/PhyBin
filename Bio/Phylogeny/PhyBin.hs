@@ -11,9 +11,9 @@ module Bio.Phylogeny.PhyBin
        ( driver, binthem, normalize, annotateWLabLists, unitTests )
        where
 
-import           Data.Function      (on)
-import           Data.List          (delete, minimumBy, sortBy, insertBy, intersperse, sort)
-import           Data.Maybe         (fromMaybe)
+import           Data.Function       (on)
+import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort)
+import           Data.Maybe          (fromMaybe)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
@@ -300,6 +300,11 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
     --
     -- results contains: num-nodes, parsed, warning-files   
+
+    case branch_collapse_thresh of 
+      Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
+      Nothing  -> return ()
+
     results :: [(Int, [NewickTree DefDecor], [(Int, String)])] <- forM files $ \ file -> 
       do --stat <- getFileStatus file		 
 	 reg <- is_regular_file file
@@ -309,12 +314,11 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	   bstr <- B.hGetContents h
 
            -- Clip off the first three characters:
-           let 
-	       parsed = map_labels name_hack $ parseNewick file bstr
+           let parsed = map_labels name_hack $ parseNewick file bstr
+               collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
-                          Nothing  -> parsed
-                          Just thr -> collapseBranches ((< thr) . snd) 
-                                         (error "FINISH THIS COLLAPSER") parsed
+                         Nothing  -> parsed
+                         Just thr -> collapseBranches ((< thr) . snd) collapser parsed
 	       annot  = annotateWLabLists pruned
 	       normal = normalize annot
 	       weight = get_weight annot
@@ -409,7 +413,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
       forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, bentry)) -> do
---	 when (size > 1 || numbins < 100) $ do 
+	 when (size > 1 || numbins < 100) $ do 
            let dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
                                    --(annotateWLabLists$ fmap (const 0) tr)
                                    -- TEMP FIXME -- using just ONE representative tree:
