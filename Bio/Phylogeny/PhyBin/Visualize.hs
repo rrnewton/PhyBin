@@ -191,8 +191,6 @@ dotNewickTree_debug title tree = Gv.graphToDot myparams graph
 --    ]
 
 
-type AnnotatedTree = NewickTree StandardDecor
-
 -- TEMP / HACK:
 prettyPrint' :: Show a => a -> String
 prettyPrint' = show

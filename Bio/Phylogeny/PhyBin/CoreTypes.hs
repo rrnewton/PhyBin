@@ -6,16 +6,24 @@
 
 module Bio.Phylogeny.PhyBin.CoreTypes
        (
-         NewickTree(..), displayDefaultTree,
-         DefDecor, StandardDecor(..), treeSize, numLeaves,
+         -- * Tree and tree decoration types
+         NewickTree(..), 
+         DefDecor, StandardDecor(..), AnnotatedTree,
+
+         -- * Tree operations
+         displayDefaultTree,
+         treeSize, numLeaves,
          get_dec, set_dec, get_children, 
          map_labels, all_labels, foldIsomorphicTrees,
+         stripStandardDecor,
 
-         -- Utilities specific to StandardDecor:
+         -- * Utilities specific to StandardDecor:
          avg_branchlen, get_bootstraps,
-         
+
+         -- * Command line config options
          PhyBinConfig(..), default_phybin_config,
 
+         -- * General helpers
          toLabel, fromLabel, Label,
        )
        where
@@ -94,10 +102,12 @@ toLabel   :: String -> Label
 ----------------------------------------------------------------------------------------------------
 
 
--- | The default decorator for NewickTrees contains BOOTSTRAP and BRANCHLENGTH.
---   The bootstrap values, if present, will range in [0..100]
+-- | The barebones default decorator for NewickTrees contains BOOTSTRAP and
+-- BRANCHLENGTH.  The bootstrap values, if present, will range in [0..100]
 type DefDecor = (Maybe Int, BranchLen)
 
+-- | A common type of tree is "AnnotatedTree", which contains the standard decorator.
+type AnnotatedTree = NewickTree StandardDecor
 
 -- | The standard decoration includes everything in `DefDecor` plus
 --   some extra cached data:
@@ -125,6 +135,9 @@ instance Pretty StandardDecor where
     "StandardDecor" <+> hsep [pPrint bl, pPrint bs
 --                             , pPrint wt, pPrint ls
                              ]
+    
+stripStandardDecor :: NewickTree StandardDecor -> NewickTree DefDecor
+stripStandardDecor = fmap (\ StandardDecor{branchLen, bootStrap} -> (bootStrap, branchLen))
 
 ----------------------------------------------------------------------------------------------------
 -- * Configuring and running the command line tool.

@@ -59,7 +59,7 @@ internal :: Parser (NewickTree DefDecor)
 internal = do _   <- char '('       
 	      bs  <- branchset
 	      _   <- char ')'       
-              _nm <- name -- IGNORED
+              _nm <- name -- IGNORED, internal names.
               return$ NTInterior defaultMeta bs
 
 branchset :: Parser [NewickTree DefDecor]
@@ -104,8 +104,11 @@ sciNotation =
      expon <- many1 digit
      return (read (coeff++"e"++sign++expon))
 
+-- | Names are a mess... they contain all kinds of garbage sometimes it seems.
+--   Thus we are very permissive.  We allow anything that is not something we specifically need to reserve.
 name :: Parser String
-name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
+name = option "" $ many1 (noneOf "()[]:;, \t\n\r\f\v")
+-- name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 
 
 

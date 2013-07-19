@@ -52,8 +52,6 @@ debug = True
 
 --------------------------------------------------------------------------------
 
--- A common type of tree is "AnnotatedTree", which contains the standard decorator.
-type AnnotatedTree = NewickTree StandardDecor
 
 -- Our sorting criteria for the children of interior nodes:
 compare_childtrees :: AnnotatedTree -> AnnotatedTree -> Ordering
@@ -604,11 +602,11 @@ deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
 
 
 -- Number of LEAVES contained in subtree:
-get_weight :: NewickTree StandardDecor -> Int
+get_weight :: AnnotatedTree -> Int
 get_weight = subtreeWeight . get_dec
 
 -- Sorted list of leaf labels contained in subtree
-get_label_list :: NewickTree StandardDecor -> [Label]
+get_label_list :: AnnotatedTree -> [Label]
 get_label_list   = sortedLabels . get_dec
 
 
@@ -660,7 +658,7 @@ unitTests =
     ~=? sortedLabels (get_dec (annotateWLabLists tre1))
 
    -- Make sure that all of these normalize to the same thing.
-   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(A,(C,D,E),B);")
+   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (displayDefaultTree$ stripStandardDecor$ norm "(A,(C,D,E),B);")
    , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
    , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
 
