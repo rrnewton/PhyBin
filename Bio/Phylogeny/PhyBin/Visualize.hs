@@ -12,6 +12,7 @@ import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
 import qualified Data.Graph.Inductive as G  hiding (run)
 import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
+import qualified Data.GraphViz.Attributes.Colors   as GC
 -- import           Test.HUnit          ((~:),(~=?),Test,test)
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
@@ -111,8 +112,10 @@ dotNewickTree title edge_scale tree =
                             GA.Label$ GA.StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
 			   --[ArrowHead noArrow, GA.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
 			    if weight == 0.0
-			    then [GA.Color [GA.X11Color Gv.Red], GA.Len minlen]
+			    then [GA.Color [weighted$ GA.X11Color Gv.Red], GA.Len minlen]
 			    else [GA.Len draw_weight]
+
+  weighted c = GC.WC {GC.wColor=c, GC.weighting=Nothing}
   minlen = 0.7
   maxlen = 3.0
   compute_draw_weight w scale = 
