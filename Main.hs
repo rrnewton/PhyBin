@@ -112,8 +112,12 @@ options =
 usage :: String
 usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
 
-        "PhyBin takes Newick tree files as input and produces, at minimum, files of the form\n"++
-        "binXX_YY.tr, each containing a list of input file paths that fall into that bin.\n\n"++
+        "PhyBin takes Newick tree files as input.  Paths of Newick files can\n"++
+        "be passed directly on the command line.  Or, if directories are provided,\n"++
+        "all files in those directories will be read.\n\n"++
+
+        "Phybin output contains, at minimum, files of the form binXX_YY.tr,\n"++
+        "each containing a list of input file paths that fall into that bin.\n\n"++
 
 	"USAGE NOTES: Currently phybin ignores input trees with the wrong number of taxa.\n"++
 	"If given a directory as input phybin will assume all contained files are Newick trees.\n\n"++

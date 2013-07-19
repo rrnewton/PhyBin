@@ -31,6 +31,9 @@ type BranchLen = Double
 
 -- | Even though the Newick format allows it, here we ignore interior node
 --   labels. (They are not commonly used.)
+--
+--   Note that these trees are rooted.  The `normalize` function ensures that a
+--   single, canonical rooted representation is chosen.
 data NewickTree a = 
    NTLeaf     a Label
  | NTInterior a [NewickTree a]
@@ -50,13 +53,7 @@ instance Functor NewickTree where
    fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
    fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
 
-
 instance Pretty dec => Pretty (NewickTree dec) where 
- -- pPrint (NTLeaf _ name)   = text (fromLabel name)
- -- pPrint (NTInterior _ ls) = 
- --     --parens$ commasep ls
- --     (parens$ sep$ map_but_last (<>text",") $ map pPrint ls)
-
  -- I'm using displayDefaultTree for the "prettiest" printing and
  -- replacing pPrint with a whitespace-improved version of show:
  pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (fromLabel name)
