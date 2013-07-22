@@ -63,7 +63,7 @@ distanceMatrix :: [AnnotatedTree] -> V.Vector (U.Vector Int)
 distanceMatrix lst = 
    let sz = P.length lst
        eachbips = V.fromList $ map allBips lst
-   in V.generate sz $ \ i -> 
+   in V.generate (sz-1) $ \ i -> 
       U.generate i $ \ j ->
       S.size (S.difference (eachbips V.! i) (eachbips V.! j))
   
@@ -149,3 +149,12 @@ insertBips table tree = do
 instance Pretty a => Pretty (S.Set a) where
  pPrint s = pPrint (S.toList s)
  
+
+printDistMat :: V.Vector (U.Vector Int) -> IO () 
+printDistMat mat = do
+  putStrLn "Robinson-Foulds distance (matrix format):"
+  V.forM_ mat $ \row -> do 
+    U.forM_ row $ \elem -> do
+      putStr (show elem)
+      putStr " "
+    putStr "\n"          

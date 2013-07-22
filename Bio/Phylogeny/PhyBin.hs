@@ -8,7 +8,8 @@
 --   It's the heart of the prgoram.
 
 module Bio.Phylogeny.PhyBin
---       ( driver, binthem, normalize, annotateWLabLists, unitTests )
+       ( driver, binthem, normalize, annotateWLabLists, unitTests, acquireTreeFiles,
+         deAnnotate )
        where
 
 import           Data.Function       (on)
@@ -252,19 +253,8 @@ int __builtin_popcount (unsigned int x);
 -}
    
 
-----------------------------------------------------------------------------------------------------
-
--- | Driver to put all the pieces together (parse, normalize, bin)
-driver :: PhyBinConfig -> IO ()
-driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_collapse_thresh } =
-   -- Unused: do_draw
- do 
-    --------------------------------------------------------------------------------
-    -- First, find out where we are and open the files:
-    --------------------------------------------------------------------------------
-    cd <- getCurrentDirectory 
-    --putStrLn$ "PHYBIN RUNNING IN DIRECTORY: "++ cd
-
+acquireTreeFiles :: [String] -> IO [String]
+acquireTreeFiles inputs = do 
     all :: [[String]] <- forM inputs $ \ path -> do
       exists <- file_exists path 
 
@@ -288,8 +278,23 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	    return [path]
 	  else error$ "phybin: Unhandled input path: " ++ path
 
-    let files = concat all -- take 10 $ concat all
-	num_files = length files
+    return (concat all)
+
+----------------------------------------------------------------------------------------------------
+
+-- | Driver to put all the pieces together (parse, normalize, bin)
+driver :: PhyBinConfig -> IO ()
+driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_collapse_thresh } =
+   -- Unused: do_draw
+ do 
+    --------------------------------------------------------------------------------
+    -- First, find out where we are and open the files:
+    --------------------------------------------------------------------------------
+    cd <- getCurrentDirectory 
+    --putStrLn$ "PHYBIN RUNNING IN DIRECTORY: "++ cd
+
+    files <- acquireTreeFiles inputs
+    let num_files = length files
 
     putStrLn$ "Parsing "++show num_files++" Newick tree files."
     --putStrLn$ "\nFirst ten \n"++ concat (map (++"\n") $ map show $ take 10 files)

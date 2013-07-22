@@ -13,13 +13,14 @@ import           System.Console.GetOpt (OptDescr(Option), ArgDescr(..), ArgOrder
 import           System.Exit           (exitSuccess)
 import           Test.HUnit            (runTestTT, Test, test)
 
+import Control.Applicative ((<$>))
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
-import Bio.Phylogeny.PhyBin.CoreTypes 
-        ( NewickTree(..), PhyBinConfig(..), default_phybin_config, DefDecor, StandardDecor(..),
-          toLabel, fromLabel, Label, set_dec, map_labels ) 
-import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists, unitTests)
+import Bio.Phylogeny.PhyBin.CoreTypes          
+import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists,
+                                       unitTests, acquireTreeFiles, deAnnotate)
 import Bio.Phylogeny.PhyBin.Parser    (parseNewick, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
+import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat)
 
 import Version
 
@@ -41,6 +42,7 @@ data Flag
     | TabDelimited Int Int
 
     | SelfTest
+    | RFMatrix
 
     | NameCutoff String
     | NamePrefix Int
@@ -61,6 +63,7 @@ options =
 
      , Option []     ["selftest"]   (NoArg SelfTest)   "run internal unit tests"
 
+     , Option []     ["rfdist"]     (NoArg RFMatrix)   "print a Robinson Foulds distance matrix for the input trees"
 
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option []        []          (NoArg NullOpt)  ""
@@ -151,7 +154,18 @@ main =
 	   Version -> do putStrLn$ "phybin version "++phybin_version; exitSuccess
 
 	   SelfTest -> do _ <- runTestTT allUnitTests; exitSuccess
-                          
+
+     	   RFMatrix -> do -- Expand wildcards, etc:
+                          treeFiles <- acquireTreeFiles files
+                          let fn f = do raw <- B.readFile f
+                                        let ls = map (`B.append` (B.pack ";")) $ 
+                                                 B.splitWith (== ';') raw
+                                        return (map (annotateWLabLists . (parseNewick f)) ls)
+                          trees <- concat <$> mapM fn treeFiles
+                          putStrLn$ "Read trees! "++show (length trees)
+                          printDistMat (distanceMatrix trees)
+                          exitSuccess
+     
 	   Output s -> return cfg { output_dir= s }
 
 	   NumTaxa n -> return cfg { num_taxa= n }

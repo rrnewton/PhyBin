@@ -16,7 +16,7 @@ import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, toLab
 
 -- | Parse a bytestring into a NewickTree with branch lengths.  The
 --   first argument is file from which the data came and is just for
---   error error messages.
+--   better error messages.
 parseNewick :: String -> B.ByteString -> NewickTree DefDecor
 parseNewick file input = 
   runB file newick_parser $
