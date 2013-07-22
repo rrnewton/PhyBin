@@ -140,12 +140,14 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
         dendro <- doCluster lnk validtrees
         case dist_thresh of
           Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
-          Just dst ->
-            let loop (C.Leaf (FullTree{treename,nwtree})) =
-                  [OneCluster [treename] [annotateWLabLists nwtree]]
+          Just dstThresh -> do
+            let dstThresh' = fromIntegral dstThresh 
+            let loop br@(C.Branch dist left right)
+                  | dist >= dstThresh' = loop left ++ loop right
+                  | otherwise          = [flattenDendro br]
+                loop br@(C.Leaf _)     = [flattenDendro br]
             -- Flatten out the dendogram:
-            in -- return (clustsToMap $ loop dendro)
-               undefined (loop dendro)
+            return (clustsToMap $ loop dendro)
     binlist <- reportClusts classes
         
     ----------------------------------------
@@ -162,16 +164,18 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     --------------------------------------------------------------------------------
 
     let numbins = length binlist
-    let base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
+    let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size)
     putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n"++ 
 	      show (nest 2 $ sep $ map text $ M.elems labelTab)
+
+    let fixme_HERE = error "fixme_HERE"
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . bintrees . thd3) binlist
     forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
        let fullTr = FullTree "fixthis" fixme_HERE avgTree
          
-       --putStrLn$ ("  WRITING " ++ combine output_dir ("bin" ++ show i ++"_"++ show size ++".txt"))
+       --putStrLn$ ("  WRITING " ++ combine output_dir (filePrefix ++ show i ++"_"++ show size ++".txt"))
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
@@ -180,7 +184,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
        writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullTr) ++ ";\n") -- FIXME
 
     unless (null warnings1 && null warnings2) $
-	writeFile (combine output_dir "bin_WARNINGS.txt")
+	writeFile (combine output_dir (filePrefix ++ "_WARNINGS.txt"))
 		  ("This file was generated to record all of the files which WERE NOT incorporated successfully into the results.\n" ++
 		   "Each of these files had some kind of problem, likely one of the following:\n"++
 		   "  (1) a mismatched number of taxa (leaves) in the tree relative to the rest of the dataset\n"++
@@ -198,7 +202,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
       forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
          let fullTr = FullTree "fixthis" fixme_HERE avgTree
 	 when (size > 1 || numbins < 100) $ do 
-           let dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (bintrees bentry))
+           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (bintrees bentry))
                                    --(annotateWLabLists$ fmap (const 0) tr)
                                    -- TEMP FIXME -- using just ONE representative tree:
                                    ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
@@ -213,6 +217,9 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     --------------------------------------------------------------------------------
     -- End driver
     --------------------------------------------------------------------------------
+
+-- filePrefix = "bin"
+filePrefix = "cluster"    
 
 --------------------------------------------------------------------------------
 -- Driver helpers:
@@ -258,13 +265,28 @@ reportClusts classes = do
     return binlist
 
 -- | Convert a flat list of clusters into a map from individual trees to clusters.
-clustsToMap :: [OneCluster a] -> BinResults a
-clustsToMap clusts =
-  error "finisheme"
+clustsToMap :: [OneCluster StandardDecor] -> BinResults StandardDecor
+clustsToMap clusts = F.foldl' fn M.empty clusts
+  where
+    fn acc theclust@(OneCluster nms trs) =
+      F.foldl' (fn2 theclust) acc trs
+    fn2 theclust acc tree =
+      M.insert (anonymize_annotated tree) theclust acc
+
+flattenDendro :: (C.Dendrogram (FullTree DefDecor)) -> OneCluster StandardDecor
+flattenDendro dendro =
+  case dendro of
+    C.Leaf (FullTree{treename,nwtree}) ->
+      OneCluster [treename] [annotateWLabLists nwtree]
+    C.Branch _ left right ->
+      -- TODO: fix quadratic append
+      flattenDendro left `appendClusts` flattenDendro right
+ where
+   appendClusts (OneCluster n1 t1) (OneCluster n2 t2)
+     = OneCluster (n1++n2) (t1++t2)
+   
 
 --------------------------------------------------------------------------------
-
-fixme_HERE = M.empty
 
 -- Monadic mapAccum
 mapAccumM :: Monad m => (acc -> x -> m (acc,y)) -> acc -> [x] -> m (acc,[y])

@@ -11,7 +11,7 @@ module Bio.Phylogeny.PhyBin.Binning
          binthem, normalize, annotateWLabLists, 
          deAnnotate, OneCluster(..), BinResults, StrippedTree,
          -- * Utilities and unit tests
-         get_weight, unitTests
+         get_weight, unitTests, anonymize_annotated
        )
        where
 
