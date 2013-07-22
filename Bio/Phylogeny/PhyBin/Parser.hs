@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE ScopedTypeVariables, BangPatterns, ParallelListComp  #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -14,7 +14,7 @@ import           Data.List as L
 import           Text.Parsec
 import           Text.Parsec.ByteString.Lazy
 import           Test.HUnit          ((~:),(~=?),Test,test,assertFailure)
-import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, treeSize, LabelTable)
+import           Bio.Phylogeny.PhyBin.CoreTypes 
 import           Prelude as P
 
 type NameHack = (String->String)
@@ -29,10 +29,13 @@ parseNewick tbl0 name_hack file input =
   B.filter (not . isSpace) input
 
 -- | Parse a list of trees, starting with an empty map of labels and accumulating a final map.
-parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [NewickTree DefDecor])
-parseNewicks name_hack pairs =
-  P.foldr fn (M.empty,[]) pairs
+parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [FullTree DefDecor])
+parseNewicks name_hack pairs = (labtbl, fullTrs)
  where
+   fullTrs = [ FullTree file labtbl tr
+             | (file,_) <- pairs
+             | tr       <- trs ]
+   (labtbl, trs) = P.foldr fn (M.empty,[]) pairs
    fn (file,bstr) (!acc,!ls) =
      let (acc',tr) = parseNewick acc name_hack file bstr
      in (acc', tr:ls)

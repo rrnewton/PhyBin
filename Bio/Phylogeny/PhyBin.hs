@@ -172,7 +172,7 @@ verify_sorted msg =
 tt :: AnnotatedTree
 tt = normalize $ annotateWLabLists $ snd$ parseNewick M.empty id "" "(A,(C,D,E),B);"
 
-norm4 :: FullTree
+norm4 :: FullTree StandardDecor
 norm4 = norm "((C,D,E),B,A);"
 
 norm5 :: AnnotatedTree
@@ -329,8 +329,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 
            -- TEMPTOGGLE
 	   when False $ do putStrLn$ "DRAWING TREE"
-                           viewNewickTree "Annotated" (lblAcc',annot)
-                           viewNewickTree "Normalized" (lblAcc', normal)
+                           viewNewickTree "Annotated"  (FullTree file lblAcc' annot)
+                           viewNewickTree "Normalized" (FullTree file lblAcc' normal)
 			   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
                                  show (map get_weight$ get_children normal)
 
@@ -405,13 +405,15 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . trees . thd3) binlist
     forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
+       let fullTr = FullTree "fixthis" fixme_HERE avgTree
+         
        --putStrLn$ ("  WRITING " ++ combine output_dir ("bin" ++ show i ++"_"++ show size ++".txt"))
        writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
        when debug$ do
          writeFile (base i size ++".dbg") (show (pPrint avgTree) ++ "\n")
-       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate (fixme_HERE,avgTree)) ++ ";\n") -- FIXME
+       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullTr) ++ ";\n") -- FIXME
 
     when (not$ null warnings) $
 	writeFile (combine output_dir "bin_WARNINGS.txt")
@@ -431,13 +433,14 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
       forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
+         let fullTr = FullTree "fixthis" fixme_HERE avgTree
 	 when (size > 1 || numbins < 100) $ do 
            let dot = dotNewickTree ("bin #"++ show i) (1.0 / avg_branchlen (trees bentry))
                                    --(annotateWLabLists$ fmap (const 0) tr)
                                    -- TEMP FIXME -- using just ONE representative tree:
                                    ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
                                      --(head$ trees bentry) 
- 				    (fixme_HERE, avgTree) )
+ 				    fullTr)
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
@@ -613,9 +616,8 @@ annotateWLabLists tr = case tr of
 		 children
 
 -- | Take the extra annotations away.  Inverse of `annotateWLabLists`.
-deAnnotate :: (a,AnnotatedTree) -> (a,NewickTree DefDecor)
-deAnnotate (a,tr) = (a, fmap (\ (StandardDecor bl bs _ _) -> (bs,bl)) tr)
-
+deAnnotate :: FullTree StandardDecor -> FullTree DefDecor
+deAnnotate (FullTree a b tr) = FullTree a b (fmap (\ (StandardDecor bl bs _ _) -> (bs,bl)) tr)
 
 -- Number of LEAVES contained in subtree:
 get_weight :: AnnotatedTree -> Int
@@ -645,17 +647,17 @@ subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =
 tre1 :: (LabelTable, NewickTree DefDecor)
 tre1 = parseNewick M.empty id "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
-tre1draw :: IO (Chan (), FullTree)
-tre1draw = viewNewickTree "tre1"$ (fst tre1, annotateWLabLists (snd tre1))
+tre1draw :: IO (Chan (), FullTree StandardDecor)
+tre1draw = viewNewickTree "tre1"$ (FullTree "" (fst tre1) (annotateWLabLists (snd tre1)))
 
 tre1dot :: IO ()
-tre1dot = print $ dotNewickTree "" 1.0 $ (fst tre1, annotateWLabLists$ snd tre1)
+tre1dot = print $ dotNewickTree "" 1.0 $ (FullTree "" (fst tre1) (annotateWLabLists$ snd tre1))
 
-norm :: String -> FullTree
+norm :: String -> FullTree StandardDecor
 norm = norm2 . B.pack
 
-norm2 :: B.ByteString -> FullTree
-norm2 bstr = (tbl, normalize $ annotateWLabLists tr)
+norm2 :: B.ByteString -> FullTree StandardDecor
+norm2 bstr = FullTree "" tbl (normalize $ annotateWLabLists tr)
   where
     (tbl,tr) = parseNewick M.empty id "test" bstr
 

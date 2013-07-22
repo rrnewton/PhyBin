@@ -8,7 +8,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        (
          -- * Tree and tree decoration types
          NewickTree(..), 
-         DefDecor, StandardDecor(..), AnnotatedTree, FullTree,
+         DefDecor, StandardDecor(..), AnnotatedTree, FullTree(..),
 
          -- * Tree operations
          displayDefaultTree,
@@ -82,20 +82,27 @@ instance Pretty dec => Pretty (NewickTree dec) where
  pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (show name)
  pPrint (NTInterior dec ls) = "NTInterior" <+> pPrint dec <+> pPrint ls
 
+instance Pretty a => Pretty (FullTree a) where
+  pPrint (FullTree name mp tr) = 
+    "FullTree " <+> text name <+> loop tr
+   where
+    loop (NTLeaf dec ind)    = "NTLeaf"     <+> pPrint dec <+> text (mp M.! ind)
+    loop (NTInterior dec ls) = "NTInterior" <+> pPrint dec <+> pPrint ls
+
 instance (Pretty k, Pretty v) => Pretty (M.Map k v) where
   pPrint mp = pPrint (M.toList mp)
 
 -- | Display a tree WITH the bootstrap and branch lengths.
-displayDefaultTree :: (LabelTable, NewickTree DefDecor) -> Doc
-displayDefaultTree (mp,NTLeaf (Nothing,_) name)   = text (mp M.! name)
-displayDefaultTree (mp,NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
-displayDefaultTree (mp,NTInterior (bootstrap,_) ls) = 
-   case bootstrap of
-     Nothing -> base
-     Just val -> base <> text ":[" <> text (show val) <> text "]"
- where
-   base = parens$ sep$ map_but_last (<>text",") $ map (curry displayDefaultTree mp) ls
-
+displayDefaultTree :: FullTree DefDecor -> Doc
+displayDefaultTree (FullTree _ mp tr) = loop tr
+  where
+    loop (NTLeaf (Nothing,_) name)     = text (mp M.! name)
+    loop (NTLeaf _ _)                  = error "WEIRD -- why did a leaf node have a bootstrap value?"
+    loop (NTInterior (bootstrap,_) ls) = 
+       case bootstrap of
+         Nothing -> base
+         Just val -> base <> text ":[" <> text (show val) <> text "]"
+      where base = parens$ sep$ map_but_last (<>text",") $ map loop ls
 
 ----------------------------------------------------------------------------------------------------
 -- Labels
@@ -145,8 +152,12 @@ data StandardDecor = StandardDecor {
 
 -- | A common type of tree contains the standard decorator and also a table for
 -- restoring the human-readable node names.
-type FullTree = (LabelTable, AnnotatedTree)
-
+data FullTree a =
+  FullTree { treename   :: String
+           , labelTable :: LabelTable
+           , nwtree     :: NewickTree a 
+           }
+ deriving (Show)
 
 instance Pretty StandardDecor where 
  pPrint (StandardDecor bl bs wt ls) = parens$

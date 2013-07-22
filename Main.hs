@@ -168,7 +168,9 @@ main =
                           let (lbls, trees) = parseNewicks id trees0 
                           putStrLn$ "Read trees! "++show (length trees)
                           putStrLn$ "Taxa: "++show (pPrint lbls)
-                          printDistMat (distanceMatrix trees)
+--                          putStrLn$ "First tree: "++show (pPrint (head trees))
+                          putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
+                          printDistMat$ distanceMatrix$ map nwtree trees
                           exitSuccess
      
 	   Output s -> return cfg { output_dir= s }
@@ -210,7 +212,7 @@ view_graphs PBC{..} =
 		str <- B.readFile file
 		putStrLn$ "Parsed: " ++ (B.unpack str)
                 let (tbl,tr) = parseNewick M.empty name_hack file str
- 	        (chan, _tr) <- viewNewickTree file (tbl, annotateWLabLists tr)
+ 	        (chan, _tr) <- viewNewickTree file (FullTree "" tbl (annotateWLabLists tr))
 	        return chan
 	      forM_ chans readChan 
 	      return ()
