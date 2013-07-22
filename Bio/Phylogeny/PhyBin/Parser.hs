@@ -9,6 +9,8 @@ import           Control.Exception  (evaluate, handle, SomeException)
 import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Char          (isSpace)
 import           Data.Map as M
+import           Data.Set as S
+import           Data.List as L
 import           Text.Parsec
 import           Text.Parsec.ByteString.Lazy
 import           Test.HUnit          ((~:),(~=?),Test,test,assertFailure)
@@ -32,18 +34,25 @@ runB file p input = case (parse p "" input) of
 		 Right x  -> x
 
 extractLabelTable :: LabelTable -> TempTree -> (LabelTable, NewickTree DefDecor)
-extractLabelTable tbl0 tr = loop tbl0 tr
+extractLabelTable tbl0 tr = (finMap,finTree)
  where
-   loop acc (NTLeaf (d,Just nm) _) =
-     let nxt = M.size acc in
-     (M.insert nxt nm acc,  NTLeaf d nxt)
-   loop acc1 (NTInterior (d,Nothing) chlds) =
-     let (acc',ls') = 
-          P.foldr (\ x (acc2,ls) ->
-                   let (acc3,x') = loop acc2 x in
-                   (acc3, x':ls))
-                 (acc1,[]) chlds
-     in (acc', NTInterior d ls')
+   flipped = M.fromList $ L.map (\(x,y)->(y,x)) $ M.toList tbl0
+   -- (_,finMap,finTree) = loop (S.fromList (M.elems tbl0)) tbl0 tr
+   (_,finMap,finTree) = loop flipped tbl0 tr
+   
+   loop seen acc (NTLeaf (d,Just nm) _)
+     | M.member nm seen = (seen, acc, NTLeaf d (seen M.! nm))
+     | otherwise = let nxt = M.size acc in
+                   (M.insert nm nxt seen,
+                    M.insert nxt nm acc,  NTLeaf d nxt)
+   loop seen1 acc1 (NTInterior (d,Nothing) chlds) =
+     let (seen',acc',ls') = 
+          P.foldr (\ x (seen2,acc2,ls) ->
+                   let (seen3,acc3,x') = loop seen2 acc2 x in
+                   (seen3, acc3, x':ls))
+                  (seen1,acc1,[])
+                  chlds
+     in (seen',acc', NTInterior d ls')
 
 ----------------------------------------------------------------------------------------------------
 -- Newick file format parser definitions:

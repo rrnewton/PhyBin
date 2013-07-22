@@ -12,8 +12,9 @@ module Bio.Phylogeny.PhyBin
          deAnnotate )
        where
 
+import qualified Data.Foldable as F
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort, unzip4)
+import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort, mapAccumL)
 import           Data.Maybe          (fromMaybe, catMaybes)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
@@ -308,17 +309,16 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
       Nothing  -> return ()
 
-    -- results contains: label-maps, num-nodes, parsed, warning-files
-    results <- forM files $ \ file -> 
-      do reg <- is_regular_file file
-	 if not reg then return (Nothing, 0,[],[(-1, file)]) else do
+    let dofile :: LabelTable -> String -> IO (LabelTable, (Int,[NewickTree DefDecor],[(Int, String)]))
+        dofile lblAcc file = do 
+         reg <- is_regular_file file
+	 if not reg then return (lblAcc, (0,[],[(-1, file)])) else do
 
            h <- openFile file ReadMode 
 	   bstr <- B.hGetContents h
 
            -- Clip off the first three characters:
-           let (labtbl, parsed0) = parseNewick M.empty name_hack file bstr
-               parsed = parsed0 -- map_labels name_hack parsed0 -- FIXME: put nameHack back...
+           let (lblAcc', parsed) = parseNewick lblAcc name_hack file bstr
                collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
                          Nothing  -> parsed
@@ -329,8 +329,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 
            -- TEMPTOGGLE
 	   when False $ do putStrLn$ "DRAWING TREE"
-                           viewNewickTree "Annotated" (labtbl,annot)
-                           viewNewickTree "Normalized" (labtbl, normal)
+                           viewNewickTree "Annotated" (lblAcc',annot)
+                           viewNewickTree "Normalized" (lblAcc', normal)
 			   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
                                  show (map get_weight$ get_children normal)
 
@@ -338,7 +338,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: file contained unexpected number of leaves ("
 					    ++ show weight ++"): "++ show file
-		    return (Just labtbl, 0,[], [(weight, file)])
+		    return (lblAcc', (0,[], [(weight, file)]))
 	    else do 
 	     when verbose$ putStr "."
 
@@ -347,10 +347,12 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 
 	     hClose h
 	     --return$ (num, [normal])
-	     return$ (Just labtbl, num, [pruned], [])
+	     return$ (lblAcc', (num, [pruned], []))
+             
+    -- results contains: label-maps, num-nodes, parsed, warning-files             
+    (lbltbl,results) <- mapAccumM dofile M.empty files
+    let (counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip3 results
 
-    let (lbltbls0, counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip4 results
-        lbtbls = catMaybes lbltbls0
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat validtrees)
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
@@ -397,9 +399,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
 
-    putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):\n"++ 
-	      show (nest 2 $ sep $ map (text . show) $ S.toList taxa) -- FIXME
---	      show (nest 2 $ sep $ map (text . (labtbl M.!)) $ S.toList taxa)
+    putStrLn$ "\nTotal unique taxa ("++ show (M.size lbltbl) ++"):\n"++ 
+	      show (nest 2 $ sep $ map text $ M.elems lbltbl)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . trees . thd3) binlist
@@ -706,3 +707,10 @@ unitTests =
 
 -- bump :: Double
 -- bump = 0.00001 -- for DIRTY HACKS
+
+-- Monadic mapAccum
+mapAccumM :: Monad m => (acc -> x -> m (acc,y)) -> acc -> [x] -> m (acc,[y])
+mapAccumM fn acc ls = F.foldrM fn' (acc,[]) ls
+  where
+    fn' x (acc,ls) = do (acc',y) <- fn acc x
+                        return (acc',y:ls)
