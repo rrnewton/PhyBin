@@ -1,4 +1,4 @@
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns, BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
@@ -50,9 +50,12 @@ type BranchLen = Double
 --   Note that these trees are rooted.  The `normalize` function ensures that a
 --   single, canonical rooted representation is chosen.
 data NewickTree a = 
-   NTLeaf     a Label
+   NTLeaf     a {-# UNPACK #-} !Label
  | NTInterior a [NewickTree a]
  deriving (Show, Eq, Ord)
+
+-- TODO: Ordering maybe shouldn't need to touch the metadata.  At least on the fast
+-- path.
 
 {-
 -- [2010.09.22] Disabling:
