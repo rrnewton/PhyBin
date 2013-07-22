@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, TupleSections #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Main where
@@ -15,10 +15,12 @@ import           Test.HUnit            (runTestTT, Test, test)
 
 import Control.Applicative ((<$>))
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
+import Text.PrettyPrint.HughesPJClass hiding (char, Style)
+
 import Bio.Phylogeny.PhyBin.CoreTypes          
 import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists,
                                        unitTests, acquireTreeFiles, deAnnotate)
-import Bio.Phylogeny.PhyBin.Parser    (parseNewick, unitTests)
+import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
 import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat)
 
@@ -160,9 +162,12 @@ main =
                           let fn f = do raw <- B.readFile f
                                         let ls = map (`B.append` (B.pack ";")) $ 
                                                  B.splitWith (== ';') raw
-                                        return (map (annotateWLabLists . snd . (parseNewick M.empty id f)) ls)
-                          trees <- concat <$> mapM fn treeFiles
+                                        return (map (f,) ls)
+                          trees0 <- concat <$> mapM fn treeFiles
+                          -- FIXME: no name_hack here:
+                          let (lbls, trees) = parseNewicks id trees0 
                           putStrLn$ "Read trees! "++show (length trees)
+                          putStrLn$ "Taxa: "++show (pPrint lbls)
                           printDistMat (distanceMatrix trees)
                           exitSuccess
      

@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin.Parser
-       (newick_parser, parseNewick, unitTests)
+       (newick_parser, parseNewick, parseNewicks, unitTests)
        where
 import           Control.Exception  (evaluate, handle, SomeException)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -27,6 +27,15 @@ parseNewick tbl0 name_hack file input =
   extractLabelTable tbl0 $ 
   runB file (newick_parser name_hack) $
   B.filter (not . isSpace) input
+
+-- | Parse a list of trees, starting with an empty map of labels and accumulating a final map.
+parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [NewickTree DefDecor])
+parseNewicks name_hack pairs =
+  P.foldr fn (M.empty,[]) pairs
+ where
+   fn (file,bstr) (acc,ls) =
+     let (acc',tr) = parseNewick acc name_hack file bstr
+     in (acc', tr:ls)
 
 runB :: Show a => String -> Parser a -> B.ByteString -> a
 runB file p input = case (parse p "" input) of
