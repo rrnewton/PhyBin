@@ -15,7 +15,6 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          treeSize, numLeaves,
          get_dec, set_dec, get_children, 
          map_labels, all_labels, foldIsomorphicTrees,
-         stripStandardDecor,
 
          -- * Utilities specific to StandardDecor:
          avg_branchlen, get_bootstraps,
@@ -135,9 +134,6 @@ instance Pretty StandardDecor where
     "StandardDecor" <+> hsep [pPrint bl, pPrint bs
 --                             , pPrint wt, pPrint ls
                              ]
-    
-stripStandardDecor :: NewickTree StandardDecor -> NewickTree DefDecor
-stripStandardDecor = fmap (\ StandardDecor{branchLen, bootStrap} -> (bootStrap, branchLen))
 
 ----------------------------------------------------------------------------------------------------
 -- * Configuring and running the command line tool.

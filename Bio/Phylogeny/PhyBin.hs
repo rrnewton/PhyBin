@@ -8,7 +8,7 @@
 --   It's the heart of the prgoram.
 
 module Bio.Phylogeny.PhyBin
-       ( driver, binthem, normalize, annotateWLabLists, unitTests )
+--       ( driver, binthem, normalize, annotateWLabLists, unitTests )
        where
 
 import           Data.Function       (on)
@@ -34,6 +34,7 @@ import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
 import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
+import           Bio.Phylogeny.PhyBin.RFDistance
 
 -- Turn on for extra invariant checking:
 debug :: Bool
@@ -658,7 +659,7 @@ unitTests =
     ~=? sortedLabels (get_dec (annotateWLabLists tre1))
 
    -- Make sure that all of these normalize to the same thing.
-   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (displayDefaultTree$ stripStandardDecor$ norm "(A,(C,D,E),B);")
+   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (displayDefaultTree$ deAnnotate$ norm "(A,(C,D,E),B);")
    , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
    , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
 
