@@ -191,11 +191,7 @@ norm5 = normalize$ annotateWLabLists$ snd$ parseNewick M.empty id "" "(D,E,C,(B,
 
 -- | When binning, the members of a OneCluster are isomorphic trees.  When clustering
 -- based on robinson-foulds distance they are merely similar trees.
-data OneCluster a = OneCluster {
-   members  :: [TreeName], 
-   bintrees :: [NewickTree a]
-   -- TODO : Get rid of this in favor of a simple list of FullTree..
-}
+newtype OneCluster a = OneCluster { clustMembers :: [FullTree a] }
   deriving Show 
 
 -- | Ignore metadata (but keep weights) for the purpose of binning
@@ -217,13 +213,13 @@ binthem ls = binthem_normed normalized
 binthem_normed :: [FullTree StandardDecor] -> BinResults StandardDecor
 binthem_normed normalized = 
 --   foldl (\ acc (lab,tree) -> M.insertWith update tree (OneCluster{ members=[lab] }) acc)
-   foldl (\ acc (FullTree treename _ tree) ->
-           M.insertWith update (anonymize_annotated tree) (OneCluster [treename] [tree]) acc)
+   foldl (\ acc ft@(FullTree treename _ tree) ->
+           M.insertWith update (anonymize_annotated tree) (OneCluster [ft]) acc)
 	 M.empty normalized
 	 --(map (mapSnd$ fmap (const ())) normalized) -- still need to STRIP them
  where 
 -- update new old = OneCluster{ members= (members new ++ members old) }
- update new old = OneCluster (members new ++ members old) (bintrees new ++ bintrees old)
+ update (OneCluster new) (OneCluster old) = OneCluster (new++old)
  --strip = fmap (const ())
 
 -- | For binning. Remove branch lengths and labels but leave weights.

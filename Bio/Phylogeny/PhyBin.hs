@@ -171,17 +171,18 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     let fixme_HERE = error "fixme_HERE"
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
-    let avgs = map (avg_trees . bintrees . thd3) binlist
-    forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
-       let fullTr = FullTree "fixthis" fixme_HERE avgTree
+    let avgs = map (avg_trees . map nwtree . clustMembers . thd3) binlist
+    forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, OneCluster ftrees), avgTree) -> do
+       let FullTree fstName labs _ = head ftrees
+           fullAvgTr = FullTree fstName labs avgTree
          
        --putStrLn$ ("  WRITING " ++ combine output_dir (filePrefix ++ show i ++"_"++ show size ++".txt"))
-       writeFile (base i size ++".txt") (concat$ map (++"\n") (members bentry))
+       writeFile (base i size ++".txt") (concat$ map ((++"\n") . treename) ftrees)
        -- writeFile (base i size ++".tr")  (show (pPrint tr) ++ ";\n")
        -- Printing the average tree instead of the stripped cannonical one:
        when debug$ do
          writeFile (base i size ++".dbg") (show (pPrint avgTree) ++ "\n")
-       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullTr) ++ ";\n") -- FIXME
+       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullAvgTr) ++ ";\n") -- FIXME
 
     unless (null warnings1 && null warnings2) $
 	writeFile (combine output_dir (filePrefix ++ "_WARNINGS.txt"))
@@ -199,15 +200,16 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, bentry), avgTree) -> do
-         let fullTr = FullTree "fixthis" fixme_HERE avgTree
-	 when (size > 1 || numbins < 100) $ do 
-           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (bintrees bentry))
+      forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, OneCluster membs), avgTree) -> do
+         let FullTree fstName labs _ = head membs
+             fullAvgTr = FullTree fstName labs avgTree 
+    	 when (size > 1 || numbins < 100) $ do 
+           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs))
                                    --(annotateWLabLists$ fmap (const 0) tr)
                                    -- TEMP FIXME -- using just ONE representative tree:
                                    ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
                                      --(head$ trees bentry) 
- 				    fullTr)
+ 				    fullAvgTr)
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
@@ -248,7 +250,7 @@ doCluster linkage validtrees = do
 reportClusts :: BinResults StandardDecor -> IO [(Int, StrippedTree, OneCluster StandardDecor)]
 reportClusts classes = do 
     let binlist = reverse $ sortBy (compare `on` fst3) $
-		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
+		  map (\ (tr,OneCluster ls) -> (length ls, tr, OneCluster ls)) $ M.toList classes
         taxa :: S.Set Int
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
         binsizes = map fst3 binlist
@@ -256,34 +258,33 @@ reportClusts classes = do
     putStrLn$ " [outcome] "++show (length binlist)++" bins found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
     putStrLn$"  ALL bin sizes, excluding singletons:"
-    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, OneCluster{bintrees})) -> do
+    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, OneCluster ftrees)) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$show$ 
            hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
-                 vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees bintrees)++", "),
-                       text "all: " <> pPrint (filter (not . null) $ map get_bootstraps bintrees)]]
+                 vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees$ map nwtree ftrees)++", "),
+                       text "all: " <> pPrint (filter (not . null) $ map (get_bootstraps . nwtree) ftrees)]]
     return binlist
 
 -- | Convert a flat list of clusters into a map from individual trees to clusters.
 clustsToMap :: [OneCluster StandardDecor] -> BinResults StandardDecor
 clustsToMap clusts = F.foldl' fn M.empty clusts
   where
-    fn acc theclust@(OneCluster nms trs) =
-      F.foldl' (fn2 theclust) acc trs
-    fn2 theclust acc tree =
-      M.insert (anonymize_annotated tree) theclust acc
+    fn acc theclust@(OneCluster ftrs) =
+      F.foldl' (fn2 theclust) acc ftrs
+    fn2 theclust acc (FullTree{nwtree}) =
+      M.insert (anonymize_annotated nwtree) theclust acc
 
 flattenDendro :: (C.Dendrogram (FullTree DefDecor)) -> OneCluster StandardDecor
 flattenDendro dendro =
   case dendro of
-    C.Leaf (FullTree{treename,nwtree}) ->
-      OneCluster [treename] [annotateWLabLists nwtree]
+    C.Leaf (FullTree{treename,labelTable,nwtree}) ->
+      OneCluster [FullTree treename labelTable (annotateWLabLists nwtree)]
     C.Branch _ left right ->
       -- TODO: fix quadratic append
       flattenDendro left `appendClusts` flattenDendro right
  where
-   appendClusts (OneCluster n1 t1) (OneCluster n2 t2)
-     = OneCluster (n1++n2) (t1++t2)
+   appendClusts (OneCluster ls1) (OneCluster ls2) = OneCluster (ls1++ls2)
    
 
 --------------------------------------------------------------------------------
