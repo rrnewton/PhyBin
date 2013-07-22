@@ -50,7 +50,7 @@ Executable phybin
 
 --  extensions: CPP
 --   extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances
-  GHC-Options: -O2 -funbox-strict-fields
+  GHC-Options: -O2 -funbox-strict-fields -rtsopts
 --  GHC-Options: -O2 -threaded 
 
 -- Doesn't work for an executable?

@@ -22,7 +22,7 @@ import           Data.LVar.NatArray as NA
 import           Bio.Phylogeny.PhyBin.CoreTypes
 -- import           Data.BitList
 import qualified Data.Set as S
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import           Data.Monoid
 import           Prelude as P

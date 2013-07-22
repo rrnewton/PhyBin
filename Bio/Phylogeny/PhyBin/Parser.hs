@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, BangPatterns #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -33,7 +33,7 @@ parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [NewickTree 
 parseNewicks name_hack pairs =
   P.foldr fn (M.empty,[]) pairs
  where
-   fn (file,bstr) (acc,ls) =
+   fn (file,bstr) (!acc,!ls) =
      let (acc',tr) = parseNewick acc name_hack file bstr
      in (acc', tr:ls)
 
