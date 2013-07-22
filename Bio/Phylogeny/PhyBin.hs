@@ -75,7 +75,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     -- Next, parse the files and do error checking and annotation.
     --------------------------------------------------------------------------------
 
-    (goodFiles,warnings) <- fmap partitionEithers $
+    (goodFiles,warnings1) <- fmap partitionEithers $
       forM files $ \ file -> do
            reg <- is_regular_file file
   	   if reg
@@ -122,10 +122,11 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     -- results contains: label-maps, num-nodes, parsed, warning-files             
     results <- mapM do_one fulltrees
     let (counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip3 results
-
+    let warnings2 = concat pairs
+        
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
-    when (length warnings > 0) $
-      putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings)
+    when (length warnings2 > 0) $
+      putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings2)
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat validtrees)
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
 
@@ -133,30 +134,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     -- Do the actual binning:
     --------------------------------------------------------------------------------
 
-    putStrLn$ "Creating equivalence classes (bins)..."
-
-    let classes = --binthem_normed$ zip files $ concat$ map snd3 results
-	          binthem$  zip files $ concat validtrees
-	binlist = reverse $ sortBy (compare `on` fst3) $
-		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
-	numbins = length binlist
-        taxa :: S.Set Int
-	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
-	warnings = concat pairs
-	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
-
-        binsizes = map fst3 binlist
-
-    putStrLn$ " [outcome] "++show numbins++" bins found, "++show (length$ takeWhile (>1) binsizes)
-             ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
-    putStrLn$"  ALL bin sizes, excluding singletons:"
-    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, BE{bintrees})) -> do
-       when (len > 1) $ -- Omit that long tail of single element classes...
-          putStrLn$show$ 
-           hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
-                 vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees bintrees)++", "),
-                       text "all: " <> pPrint (filter (not . null) $ map get_bootstraps bintrees)]]
-
+    (numbins, base, binlist, classes) <- doBins files validtrees pairs output_dir
 
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
@@ -187,19 +165,18 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
          writeFile (base i size ++".dbg") (show (pPrint avgTree) ++ "\n")
        writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullTr) ++ ";\n") -- FIXME
 
-    when (not$ null warnings) $
+    unless (null warnings1 && null warnings2) $
 	writeFile (combine output_dir "bin_WARNINGS.txt")
 		  ("This file was generated to record all of the files which WERE NOT incorporated successfully into the results.\n" ++
 		   "Each of these files had some kind of problem, likely one of the following:\n"++
 		   "  (1) a mismatched number of taxa (leaves) in the tree relative to the rest of the dataset\n"++
 		   "  (2) a file that could not be read.\n"++
 		   "  (3) a file that could not be parsed.\n\n"++
-		   concat (map (\ (n,file) -> 
-				(if n == -1 
-				 then "Not a regular/readable file: "++ file 
-				 else "Wrong number of taxa ("++ show n ++"): "++ file)
-				++"\n") 
-		           warnings))
+		   concat (map (\ file -> "Not a regular/readable file: "++ file++"\n")
+		           warnings1) ++ 
+		   concat (map (\ (n,file) ->
+                                 "Wrong number of taxa ("++ show n ++"): "++ file++"\n")
+		           warnings2))
     putStrLn$ "[finished] Wrote contents of each bin to bin<N>_<binsize>.txt"
     putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
     when (do_graph) $ do
@@ -222,6 +199,38 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
     -- End driver
     --------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+-- Driver helpers:
+--------------------------------------------------------------------------------
+
+doBins files validtrees pairs output_dir = do 
+    putStrLn$ "Creating equivalence classes (bins)..."
+
+    let classes = --binthem_normed$ zip files $ concat$ map snd3 results
+	          binthem$  zip files $ concat validtrees
+	binlist = reverse $ sortBy (compare `on` fst3) $
+		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
+	numbins = length binlist
+        taxa :: S.Set Int
+	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
+	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
+
+        binsizes = map fst3 binlist
+
+    putStrLn$ " [outcome] "++show numbins++" bins found, "++show (length$ takeWhile (>1) binsizes)
+             ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
+    putStrLn$"  ALL bin sizes, excluding singletons:"
+    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, BE{bintrees})) -> do
+       when (len > 1) $ -- Omit that long tail of single element classes...
+          putStrLn$show$ 
+           hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
+                 vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees bintrees)++", "),
+                       text "all: " <> pPrint (filter (not . null) $ map get_bootstraps bintrees)]]
+
+    return (numbins, base, binlist, classes)
+
+--------------------------------------------------------------------------------
 
 fixme_HERE = M.empty
 
