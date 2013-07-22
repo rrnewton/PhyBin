@@ -32,6 +32,7 @@ import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
 import qualified HSH 
+import qualified Data.Clustering.Hierarchical as C
 
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
@@ -51,7 +52,8 @@ debug = True
 
 -- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
-driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_collapse_thresh } =
+driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
+            do_graph, branch_collapse_thresh, dist_thresh, clust_mode } =
    -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
@@ -91,16 +93,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
       Nothing  -> return ()
 
-    let do_one :: FullTree DefDecor -> IO (Int, [NewickTree DefDecor], [(Int, String)])
+    let do_one :: FullTree DefDecor -> IO (Int, [FullTree DefDecor], [(Int, String)])
         do_one (FullTree treename lblAcc parsed) = do 
            let 
                collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
                          Nothing  -> parsed
                          Just thr -> collapseBranches ((< thr) . snd) collapser parsed
---	       annot  = annotateWLabLists pruned
---	       normal = normalize annot
---	       weight = get_weight annot
                numL   = numLeaves pruned
                
            -- TEMPTOGGLE
@@ -117,9 +116,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 		    return (0, [], [(numL, treename)])
 	    else do 
 	     when verbose$ putStr "."
-	     return$ (numL, [pruned], [])
-             
-    -- results contains: label-maps, num-nodes, parsed, warning-files             
+	     return$ (numL, [FullTree treename lblAcc pruned], [])
+
     results <- mapM do_one fulltrees
     let (counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip3 results
     let warnings2 = concat pairs
@@ -131,11 +129,19 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
 
     --------------------------------------------------------------------------------
-    -- Do the actual binning:
+    -- Next, dispatch on the mode and do the actual clustering or binning.
     --------------------------------------------------------------------------------
 
-    (numbins, base, binlist, classes) <- doBins files validtrees pairs output_dir
-
+    ( binlist, classes) <- case clust_mode of
+      BinThem -> doBins files (concat validtrees) pairs output_dir
+      ClusterThem C.SingleLinkage   -> error "finishme"
+      ClusterThem C.CompleteLinkage -> error "finishme"
+      ClusterThem C.UPGMA           -> error "finishme"      
+      ClusterThem oth -> error$"internal error: unsupported clustering mode: "++show oth
+      
+    let numbins = length binlist
+	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
+        
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
     -- forM_ (map snd3 results) $ \parsed -> do 
@@ -208,17 +214,14 @@ doBins files validtrees pairs output_dir = do
     putStrLn$ "Creating equivalence classes (bins)..."
 
     let classes = --binthem_normed$ zip files $ concat$ map snd3 results
-	          binthem$  zip files $ concat validtrees
+	          binthem validtrees
 	binlist = reverse $ sortBy (compare `on` fst3) $
 		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
-	numbins = length binlist
         taxa :: S.Set Int
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
-	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
-
         binsizes = map fst3 binlist
 
-    putStrLn$ " [outcome] "++show numbins++" bins found, "++show (length$ takeWhile (>1) binsizes)
+    putStrLn$ " [outcome] "++show (length binlist)++" bins found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
     putStrLn$"  ALL bin sizes, excluding singletons:"
     forM_ (zip [1..] binlist) $ \ (ind, (len, tr, BE{bintrees})) -> do
@@ -228,7 +231,7 @@ doBins files validtrees pairs output_dir = do
                  vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees bintrees)++", "),
                        text "all: " <> pPrint (filter (not . null) $ map get_bootstraps bintrees)]]
 
-    return (numbins, base, binlist, classes)
+    return (binlist, classes)
 
 --------------------------------------------------------------------------------
 

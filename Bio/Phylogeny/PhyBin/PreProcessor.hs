@@ -8,8 +8,9 @@ module Bio.Phylogeny.PhyBin.PreProcessor
 
 import  Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, Label)
 
--- | Removes branches that do not meet a predicate, leaving a
---   shallower, "bushier" tree.
+-- | Removes branches that do not meet a predicate, leaving a shallower, "bushier"
+--   tree.  This does NOT change the set of leaves (taxa), it only removes interior
+--   nodes.
 collapseBranches :: forall a . (a -> Bool) -> (a -> a -> a) -> NewickTree a -> NewickTree a
 collapseBranches isCollapsable collapse origtr = final
   where    

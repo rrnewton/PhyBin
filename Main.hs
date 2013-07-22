@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards, TupleSections #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
+{-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 
 module Main where
 import           Data.List (sort)
@@ -70,12 +70,8 @@ options =
      , Option ['V']     ["version"] (NoArg Version)    "show version number"
 
      , Option ['o']     ["output"]  (ReqArg Output "DIR")  "set directory to contain all output files (default \"./phybin_out/\")"
-
      , Option []     ["selftest"]   (NoArg SelfTest)   "run internal unit tests"
-
      , Option []     ["rfdist"]     (NoArg RFMatrix)   "print a Robinson Foulds distance matrix for the input trees"
-
---     , Option []     ["rfdist"]     (NoArg RFMatrix)   "print a Robinson Foulds distance matrix for the input trees"
        
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option []        []          (NoArg NullOpt)  ""
@@ -215,6 +211,11 @@ main =
                           putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
                           printDistMat$ distanceMatrix$ map nwtree trees
                           exitSuccess
+
+           Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
+           BinningMode -> return cfg { clust_mode = BinThem }
+           EditDistThresh n -> return cfg { dist_thresh = Just n }
+           DendogramOnly    -> return cfg { dist_thresh = Nothing }
      
 	   Output s -> return cfg { output_dir= s }
 

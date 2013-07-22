@@ -9,7 +9,8 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          -- * Tree and tree decoration types
          NewickTree(..), 
          DefDecor, StandardDecor(..), AnnotatedTree, FullTree(..),
-
+         ClustMode(..),
+         
          -- * Tree operations
          displayDefaultTree,
          treeSize, numLeaves,
@@ -32,6 +33,8 @@ import Data.Foldable (Foldable(..))
 import Data.Maybe (maybeToList)
 import Data.Monoid (mappend, mconcat)
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
+
+import qualified Data.Clustering.Hierarchical as C
 
 #define NO_ATOMS
 #ifndef NO_ATOMS
@@ -178,7 +181,9 @@ data PhyBinConfig =
       , output_dir :: String
       , inputs :: [String]
       , do_graph :: Bool
-      , do_draw :: Bool        
+      , do_draw :: Bool
+      , clust_mode  :: ClustMode
+      , dist_thresh :: Maybe Int
       , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
       }
 
@@ -192,8 +197,12 @@ default_phybin_config =
       , inputs = []
       , do_graph = False
       , do_draw = False
+      , clust_mode = BinThem
+      , dist_thresh = Nothing
       , branch_collapse_thresh = Nothing
      }
+
+data ClustMode = BinThem | ClusterThem C.Linkage
 
 ----------------------------------------------------------------------------------------------------
 -- * Simple utility functions for the core types:

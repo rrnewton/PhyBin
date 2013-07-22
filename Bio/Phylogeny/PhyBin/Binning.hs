@@ -38,7 +38,7 @@ import qualified HSH
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
-import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
+import           Bio.Phylogeny.PhyBin.Parser (parseNewicks, parseNewick)
 import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 import           Bio.Phylogeny.PhyBin.RFDistance
@@ -205,21 +205,21 @@ type BinResults = M.Map StrippedTree BinEntry
 
 -- | The binning function.
 --   Takes labeled trees, classifies labels into equivalence classes.
-binthem :: [(String, NewickTree DefDecor)] -> BinResults
+binthem :: [FullTree DefDecor] -> BinResults
 binthem ls = binthem_normed normalized
  where
-  normalized = map (\ (lab,tree) -> (lab, normalize $ annotateWLabLists tree)) ls
-
+  normalized = map (\ (FullTree n lab tree) ->
+                     FullTree n lab (normalize $ annotateWLabLists tree)) ls
 
 -- | This version accepts trees that are already normalized:
-binthem_normed :: [(String, AnnotatedTree)] -> BinResults
+binthem_normed :: [FullTree StandardDecor] -> BinResults
 binthem_normed normalized = 
 --   foldl (\ acc (lab,tree) -> M.insertWith update tree (BE{ members=[lab] }) acc)
-   foldl (\ acc (lab,tree) -> M.insertWith update (anonymize_annotated tree) (BE [lab] [tree]) acc)
+   foldl (\ acc (FullTree treename _ tree) ->
+           M.insertWith update (anonymize_annotated tree) (BE [treename] [tree]) acc)
 	 M.empty normalized
 	 --(map (mapSnd$ fmap (const ())) normalized) -- still need to STRIP them
  where 
- --(++)
 -- update new old = BE{ members= (members new ++ members old) }
  update new old = BE (members new ++ members old) (bintrees new ++ bintrees old)
  --strip = fmap (const ())
@@ -415,9 +415,14 @@ unitTests =
 
    , "phbin: these 3 trees should fall in the same category" ~: 
       1 ~=? (length $ M.toList $
-             binthem [("one",   snd$parseNewick M.empty id "" "(A,(C,D,E),B);"),
- 		      ("two",   snd$parseNewick M.empty id "" "((C,D,E),B,A);"),
-		      ("three", snd$parseNewick M.empty id "" "(D,E,C,(B,A));")])
+             binthem $ snd $ 
+              parseNewicks id [("one",  "(A,(C,D,E),B);"), 
+                               ("two",  "((C,D,E),B,A);"),
+                               ("three","(D,E,C,(B,A));")]
+             -- [("one",   snd$parseNewick M.empty id "" "(A,(C,D,E),B);"),
+             --  ("two",   snd$parseNewick M.empty id "" "((C,D,E),B,A);"),
+             --  ("three", snd$parseNewick M.empty id "" "(D,E,C,(B,A));")]
+            )
       
    , "dotConversion" ~: True ~=? 100 < length (show $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
    ]
