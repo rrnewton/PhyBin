@@ -22,6 +22,7 @@ import           Data.LVar.NatArray as NA
 import           Bio.Phylogeny.PhyBin.CoreTypes
 -- import           Data.BitList
 import qualified Data.Set as S
+import qualified Data.IntSet as SI
 import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import           Data.Monoid
@@ -33,7 +34,7 @@ import           Prelude as P
 
 -- | Dense sets of taxa, aka Bipartitions or BiPs
 --   We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N). 
-type DenseLabelSet = S.Set Label
+type DenseLabelSet = SI.IntSet 
 -- type DenseLabelSet s = BitList
 -- type DenseLabelSet = UB.Vector B.Bit
 
@@ -48,10 +49,10 @@ mkEmptyDense :: Int -> DenseLabelSet
 denseUnions  :: Int -> [DenseLabelSet] -> DenseLabelSet
 bipSize      :: DenseLabelSet -> Int
 
-markLabel lab set  = S.insert lab set 
-mkEmptyDense _size = S.empty
-denseUnions _size  = S.unions 
-bipSize            = S.size
+markLabel lab set  = SI.insert lab set 
+mkEmptyDense _size = SI.empty
+denseUnions _size  = SI.unions 
+bipSize            = SI.size
 
 
 --------------------------------------------------------------------------------
