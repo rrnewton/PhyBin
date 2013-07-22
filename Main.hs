@@ -160,7 +160,7 @@ main =
                           let fn f = do raw <- B.readFile f
                                         let ls = map (`B.append` (B.pack ";")) $ 
                                                  B.splitWith (== ';') raw
-                                        return (map (annotateWLabLists . (parseNewick f)) ls)
+                                        return (map (annotateWLabLists . snd . (parseNewick f)) ls)
                           trees <- concat <$> mapM fn treeFiles
                           putStrLn$ "Read trees! "++show (length trees)
                           printDistMat (distanceMatrix trees)
@@ -178,11 +178,9 @@ main =
 	   Force            -> error "force option not handled yet"
 
 
-	   NameCutoff str -> let set = S.fromList str 
-				 new = toLabel . takeWhile (not . flip S.member set) . fromLabel
-			     in return cfg { name_hack = new . name_hack cfg }
-	   NamePrefix n   -> let new = toLabel . (take n) . fromLabel 
-			     in return cfg { name_hack = new . name_hack cfg }
+	   NameCutoff str -> let chopper = takeWhile (not . flip S.member (S.fromList str)) 
+			     in return cfg { name_hack = chopper . name_hack cfg }
+	   NamePrefix n   -> return cfg { name_hack = (take n) . name_hack cfg }
 
            -- This should always be after cutoff/prefix:
 	   NameTable file -> do reader <- name_table_reader file
@@ -206,10 +204,9 @@ view_graphs PBC{..} =
                 putStrLn$ "Drawing "++ file ++"...\n"
 		str <- B.readFile file
 		putStrLn$ "Parsed: " ++ (B.unpack str)
- 	        (chan, _tr) <- viewNewickTree file $ 
-			       annotateWLabLists$ 
-			       map_labels name_hack $ 
-			       parseNewick file str
+                let (tbl,tr) = -- map_labels name_hack $ -- FIXME
+                               parseNewick file str
+ 	        (chan, _tr) <- viewNewickTree file (tbl, annotateWLabLists tr)
 	        return chan
 	      forM_ chans readChan 
 	      return ()
@@ -255,6 +252,8 @@ main_test =
  withArgs ["-w","~/newton_and_newton_local/datasets/yersinia/yersinia_trees/111.dnd","-m","../datasets/yersinia/name_table_hack_yersinia.txt"]
 	  main 
 
+-- [2013.07.22] Disabling for the new Label representation:
+{-
 pa :: NewickTree DefDecor
 pa = set_dec (Nothing,1) $ 
     NTInterior () [NTInterior () [NTLeaf () "RE",NTInterior () [NTLeaf () "SD",NTLeaf () "SM"]],NTInterior () [NTLeaf () "BB",NTLeaf () "BJ"],NTInterior () [NTLeaf () "MB",NTLeaf () "ML"]]
@@ -288,8 +287,6 @@ num2 = M.size $ binthem [a_,b_]
 a_norm :: NewickTree StandardDecor
 a_norm = normalize (annotateWLabLists$ snd a_)
 
---a_norm = NTInterior (0.13899,7,["BB","BJ","MB","ML","RE","SD","SM"]) [NTInterior (0.0,3,["RE","SD","SM"]) [NTLeaf (0.13143,1,["RE"]) "RE",NTInterior (5.697e-2,2,["SD","SM"]) [NTLeaf (5.977e-2,1,["SD"]) "SD",NTLeaf (3.95e-2,1,["SM"]) "SM"]],NTInterior (9.019e-2,2,["BB","BJ"]) [NTLeaf (0.11856,1,["BB"]) "BB",NTLeaf (0.13592,1,["BJ"]) "BJ"],NTInterior (0.13194,2,["MB","ML"]) [NTLeaf (0.19456,1,["MB"]) "MB",NTLeaf (0.16603,1,["ML"]) "ML"]]
-
 b_norm_ :: NewickTree (Double, Int, [Label])
 b_norm_ = NTInterior (0.0,7,["BB","BJ","MB","ML","RE","SD","SM"])
          [NTInterior (0.23143,2,["BB","BJ"]) [NTLeaf (9.192e-2,1,["BB"]) "BB",NTLeaf (0.10125,1,["BJ"]) "BJ"],NTInterior (6.621e-2,2,["MB","ML"]) [NTLeaf (0.16184,1,["MB"]) "MB",NTLeaf (0.15233,1,["ML"]) "ML"],NTInterior (6.527e-2,3,["RE","SD","SM"]) [NTLeaf (0.18443,1,["RE"]) "RE",NTInterior (0.13734,2,["SD","SM"]) [NTLeaf (3.002e-2,1,["SD"]) "SD",NTLeaf (2.975e-2,1,["SM"]) "SM"]]]
@@ -316,3 +313,4 @@ withBootstrap = "((((A8F330_:0.01131438136322714984,(G0GWK2_:0.00568050636963043
 
 withBootstrap2 :: String
 withBootstrap2 = "((((A8F330_:0.01131438136322714984,(G0GWK2_:0.00568050636963043226,(Q92FV4_:0.00284163304504484121,((B0BVQ5_:0.00319487112504297311,A8GU65_:0.00000122123005994819):0.00279881991324161267[74],(C3PM27_:0.00560787769333294297,C4K2Z0_:0.00559642713265556899):0.00000122123005994819[15]):0.00000122123005994819[4]):0.00276851661606284868[56]):0.00283144414216590342[60]):0.00886304965525876697[76],(A8GQC0_:0.05449879836105625541,(A8F0B2_:0.04736199885985507840,Q4UJN9_:0.02648399728559588939):0.00905997055810744446[64]):0.00323255855543533657[28]):0.02237505187863457132[29],(Q1RGK5_:0.00000122123005994819,A8GYD7_:0.00000122123005994819):0.28299884298270094884[100]):0.05776841634437222123[100],(Q9ZC84_:0.00000122123005994819,D5AYH5_:0.00000122123005994819):0.00951976341375833368[99],Q68VM9_:0.04408933524904214141);"
+-}

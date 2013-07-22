@@ -23,7 +23,7 @@ import           Bio.Phylogeny.PhyBin.CoreTypes
 ----------------------------------------------------------------------------------------------------
 
 -- First we need to be able to convert our trees to FGL graphs:
-toGraph :: AnnotatedTree -> G.Gr String Double
+toGraph :: FullTree -> G.Gr String Double
 toGraph (tbl,tree) = G.run_ G.empty $ loop tree
   where
  fromLabel ix = tbl ! ix
@@ -39,8 +39,8 @@ toGraph (tbl,tree) = G.run_ G.empty $ loop tree
        return bigname
 
 -- This version uses the tree nodes themselves as graph labels.
--- toGraph2 :: AnnotatedTree -> G.Gr AnnotatedTree Double
-toGraph2 :: AnnotatedTree -> G.Gr (NewickTree StandardDecor) Double       
+-- toGraph2 :: FullTree -> G.Gr FullTree Double
+toGraph2 :: FullTree -> G.Gr (NewickTree StandardDecor) Double       
 toGraph2 (tbl,tree) = G.run_ G.empty $ loop tree
   where
  loop node@(NTLeaf _  _) =  
@@ -58,7 +58,7 @@ toGraph2 (tbl,tree) = G.run_ G.empty $ loop tree
 --   Fork a thread that then runs graphviz.
 --   The channel retuned will carry a single message to signal
 --   completion of the subprocess.
-viewNewickTree :: String -> AnnotatedTree -> IO (Chan (), AnnotatedTree)
+viewNewickTree :: String -> FullTree -> IO (Chan (), FullTree)
 viewNewickTree title tree =
   do chan <- newChan
      let dot = dotNewickTree title (1.0 / avg_branchlen [snd tree])
@@ -88,7 +88,7 @@ dotToPDF dot file =
   Gv.runGraphvizCommand default_cmd dot Gv.Pdf file
 
 -- | Convert a NewickTree to a graphviz Dot graph representation.
-dotNewickTree :: String -> Double -> AnnotatedTree -> Gv.DotGraph G.Node
+dotNewickTree :: String -> Double -> FullTree -> Gv.DotGraph G.Node
 dotNewickTree title edge_scale atree@(tbl,tree) = 
     --trace ("EDGE SCALE: " ++ show edge_scale) $
     Gv.graphToDot myparams graph
@@ -130,7 +130,7 @@ dotNewickTree title edge_scale atree@(tbl,tree) =
 
 
 -- | This version shows the ordered/rooted structure of the normalized tree.
-dotNewickTree_debug :: String -> AnnotatedTree -> Gv.DotGraph G.Node
+dotNewickTree_debug :: String -> FullTree -> Gv.DotGraph G.Node
 dotNewickTree_debug title atree@(tbl,tree) = Gv.graphToDot myparams graph
  where 
   graph = toGraph2 atree
@@ -168,23 +168,23 @@ dotNewickTree_debug title atree@(tbl,tree) = Gv.graphToDot myparams graph
 --------------------------------------------------------------------------------
 
 
--- tt0 :: IO (Chan (), AnnotatedTree)
+-- tt0 :: IO (Chan (), FullTree)
 -- tt0 = drawNewickTree "tt0" $ annotateWLabLists $ parseNewick "" "(A,(C,D,E),B);"
 
--- tt3 :: IO (Chan (), AnnotatedTree)
+-- tt3 :: IO (Chan (), FullTree)
 -- tt3 = drawNewickTree "tt3" tt
 
--- tt4 :: IO (Chan (), AnnotatedTree)
+-- tt4 :: IO (Chan (), FullTree)
 -- tt4 = drawNewickTree "tt4"$ trace ("FINAL: "++ show (pPrint norm4)) $ norm4
 
--- tt5 :: IO (Chan (), AnnotatedTree)
+-- tt5 :: IO (Chan (), FullTree)
 -- tt5 = drawNewickTree "tt5"$ norm5
 
 
 -- tt5' :: String
 -- tt5' = prettyPrint' $ dotNewickTree "norm5" 1.0 norm5
 
--- ttall :: IO (Chan (), AnnotatedTree)
+-- ttall :: IO (Chan (), FullTree)
 -- ttall = do tt3; tt4; tt5
 
 -- tt2 :: G.Gr String Double

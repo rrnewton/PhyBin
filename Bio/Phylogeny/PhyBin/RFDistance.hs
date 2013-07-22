@@ -59,7 +59,7 @@ bipSize            = S.size
 --------------------------------------------------------------------------------
 
 -- | Returns a triangular distance matrix encoded as a vector.
-distanceMatrix :: [AnnotatedTree] -> V.Vector (U.Vector Int)
+distanceMatrix :: [NewickTree a] -> V.Vector (U.Vector Int)
 distanceMatrix lst = 
    let sz = P.length lst
        eachbips = V.fromList $ map allBips lst
@@ -85,6 +85,7 @@ foldBips f tr = F.foldMap f' (labelBips tr)
  where f' (_,bips) = F.foldMap f bips
   
 -- | Get all non-singleton BiPs implied by a tree.
+allBips :: NewickTree a -> S.Set DenseLabelSet
 allBips tr = S.filter ((> 1) . bipSize) $ foldBips S.insert tr S.empty
 
 --------------------------------------------------------------------------------

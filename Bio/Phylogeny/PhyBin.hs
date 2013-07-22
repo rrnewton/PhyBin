@@ -90,7 +90,7 @@ normalize tree = snd$ loop tree Nothing
   -- Outputs: 
   --    1. new node
   --    3. the best candidate root anywhere under this subtree
-  loop :: AnnotatedTree -> Maybe AnnotatedTree -> (AnnotatedTree, AnnotatedTree)
+  loop :: AnnotatedTree -> Maybe (AnnotatedTree) -> (AnnotatedTree, AnnotatedTree)
   loop node ctxt  = case node of
     NTLeaf (StandardDecor _ _ w sorted) _name -> 
 	(node, 
@@ -153,7 +153,7 @@ normalize tree = snd$ loop tree Nothing
 
 
 -- Verify that our invariants are met:
-verify_sorted :: (Show a, Pretty a) => String -> (a -> NewickTree StandardDecor) -> [a] -> [a]
+verify_sorted :: (Show a, Pretty a) => String -> (a -> AnnotatedTree) -> [a] -> [a]
 verify_sorted msg = 
  if debug 
  then \ project nodes ->
@@ -169,13 +169,13 @@ verify_sorted msg =
 
 -- TODO: Salvage any of these tests that are worthwhile and get them into the unit tests:	        	
 tt :: AnnotatedTree
-tt = normalize $ annotateWLabLists $ parseNewick "" "(A,(C,D,E),B);"
+tt = normalize $ annotateWLabLists $ snd$ parseNewick "" "(A,(C,D,E),B);"
 
-norm4 :: AnnotatedTree
+norm4 :: FullTree
 norm4 = norm "((C,D,E),B,A);"
 
 norm5 :: AnnotatedTree
-norm5 = normalize$ annotateWLabLists$ parseNewick "" "(D,E,C,(B,A));"
+norm5 = normalize$ annotateWLabLists$ snd$ parseNewick "" "(D,E,C,(B,A));"
 
 
 ----------------------------------------------------------------------------------------------------
@@ -318,7 +318,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	   bstr <- B.hGetContents h
 
            -- Clip off the first three characters:
-           let parsed = map_labels name_hack $ parseNewick file bstr
+           let (labtbl, parsed0) = parseNewick file bstr
+               parsed = parsed0 -- map_labels name_hack parsed0 -- FIXME: put nameHack back...
                collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
                          Nothing  -> parsed
@@ -328,8 +329,11 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	       weight = get_weight annot
 
            -- TEMPTOGGLE
-	   when False $ do putStrLn$ "DRAWING TREE";  viewNewickTree "Annotated" annot;  viewNewickTree "Normalized" normal
-			   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++ show (map get_weight$ get_children normal)
+	   when False $ do putStrLn$ "DRAWING TREE"
+                           viewNewickTree "Annotated" (labtbl,annot)
+                           viewNewickTree "Normalized" (labtbl, normal)
+			   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
+                                 show (map get_weight$ get_children normal)
 
            if not$ weight == num_taxa
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
@@ -361,6 +365,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	binlist = reverse $ sortBy (compare `on` fst3) $
 		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
 	numbins = length binlist
+        taxa :: S.Set Int
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
 	warnings = concat $ map thd3 results
 	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
@@ -392,7 +397,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
 
     putStrLn$ "\nTotal unique taxa ("++ show (S.size taxa) ++"):\n"++ 
-	      show (nest 2 $ sep $ map (text . fromLabel) $ S.toList taxa)
+	      show (nest 2 $ sep $ map (text . show) $ S.toList taxa) -- FIXME
+--	      show (nest 2 $ sep $ map (text . (labtbl M.!)) $ S.toList taxa)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . trees . thd3) binlist
@@ -403,7 +409,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
        -- Printing the average tree instead of the stripped cannonical one:
        when debug$ do
          writeFile (base i size ++".dbg") (show (pPrint avgTree) ++ "\n")
-       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate$ avgTree) ++ ";\n")
+       writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate (fixme_HERE,avgTree)) ++ ";\n") -- FIXME
 
     when (not$ null warnings) $
 	writeFile (combine output_dir "bin_WARNINGS.txt")
@@ -429,7 +435,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
                                    -- TEMP FIXME -- using just ONE representative tree:
                                    ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
                                      --(head$ trees bentry) 
- 				    avgTree )
+ 				    (fixme_HERE, avgTree) )
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
       putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
@@ -439,6 +445,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
     -- End driver
     --------------------------------------------------------------------------------
+
+fixme_HERE = M.empty
 
 {-
 nonzero_blens :: AnnotatedTree -> Int
@@ -603,8 +611,8 @@ annotateWLabLists tr = case tr of
 		 children
 
 -- | Take the extra annotations away.  Inverse of `annotateWLabLists`.
-deAnnotate :: AnnotatedTree -> NewickTree DefDecor 
-deAnnotate = fmap (\ (StandardDecor bl bs _ _) -> (bs,bl))
+deAnnotate :: (a,AnnotatedTree) -> (a,NewickTree DefDecor)
+deAnnotate (a,tr) = (a, fmap (\ (StandardDecor bl bs _ _) -> (bs,bl)) tr)
 
 
 -- Number of LEAVES contained in subtree:
@@ -632,26 +640,27 @@ subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =
 -- UNIT TESTING
 ----------------------------------------------------------------------------------------------------
 
-tre1 :: NewickTree DefDecor
+tre1 :: (LabelTable, NewickTree DefDecor)
 tre1 = parseNewick "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
-tre1draw :: IO (Chan (), AnnotatedTree)
-tre1draw = viewNewickTree "tre1"$ annotateWLabLists tre1
+tre1draw :: IO (Chan (), FullTree)
+tre1draw = viewNewickTree "tre1"$ (fst tre1, annotateWLabLists (snd tre1))
 
 tre1dot :: IO ()
-tre1dot = print $ dotNewickTree "" 1.0 $ annotateWLabLists tre1
+tre1dot = print $ dotNewickTree "" 1.0 $ (fst tre1, annotateWLabLists$ snd tre1)
 
-
-norm :: String -> AnnotatedTree
+norm :: String -> FullTree
 norm = norm2 . B.pack
 
-norm2 :: B.ByteString -> AnnotatedTree
-norm2 = normalize . annotateWLabLists . parseNewick "test"
+norm2 :: B.ByteString -> FullTree
+norm2 bstr = (tbl, normalize $ annotateWLabLists tr)
+  where
+    (tbl,tr) = parseNewick "test" bstr
 
 unitTests :: Test
 unitTests = 
-  let 
-      ntl s = NTLeaf (Nothing,0.0) (toLabel s)
+  let ntl s = NTLeaf (Nothing,0.0) s
+      (tbl,tre1_) = tre1
   in 
   test 
    [ 
@@ -659,12 +668,12 @@ unitTests =
    , "demerge" ~: [2,4,6] ~=? demerge [1,2,3,4,5,6] [1,3,5::Int]
    , "demerge" ~: [1,3,5] ~=? demerge [1,2,3,4,5,6] [2,4,6::Int]
    , "annotateWLabLists" ~: 
-     --NTInterior (0.0,[A,B,C,D]) [NTLeaf (0.1,[A]) A,NTLeaf (0.2,[B]) B,NTInterior (0.5,[C,D]) [NTLeaf (0.3,[C]) C,NTLeaf (0.4,[D]) D]]
-        map toLabel ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
-    ~=? sortedLabels (get_dec (annotateWLabLists tre1))
+     ["A","B","C","D"] -- ORD on atoms is expensive... it must use the whole string.
+      ~=? map (tbl M.!) 
+          (sortedLabels (get_dec (annotateWLabLists tre1_)))
 
    -- Make sure that all of these normalize to the same thing.
-   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (displayDefaultTree$ deAnnotate$ norm "(A,(C,D,E),B);")
+   , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (displayDefaultTree $ deAnnotate$ norm "(A,(C,D,E),B);")
    , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
    , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
 
@@ -676,9 +685,9 @@ unitTests =
 
    , "phbin: these 3 trees should fall in the same category" ~: 
       1 ~=? (length $ M.toList $
-             binthem [("one",   parseNewick "" "(A,(C,D,E),B);"),
- 		      ("two",   parseNewick "" "((C,D,E),B,A);"),
-		      ("three", parseNewick "" "(D,E,C,(B,A));")])
+             binthem [("one",   snd$parseNewick "" "(A,(C,D,E),B);"),
+ 		      ("two",   snd$parseNewick "" "((C,D,E),B,A);"),
+		      ("three", snd$parseNewick "" "(D,E,C,(B,A));")])
       
    , "dotConversion" ~: True ~=? 100 < length (show $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
    ]

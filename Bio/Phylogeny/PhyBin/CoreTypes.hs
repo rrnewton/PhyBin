@@ -8,7 +8,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        (
          -- * Tree and tree decoration types
          NewickTree(..), 
-         DefDecor, StandardDecor(..), AnnotatedTree,
+         DefDecor, StandardDecor(..), AnnotatedTree, FullTree,
 
          -- * Tree operations
          displayDefaultTree,
@@ -79,17 +79,19 @@ instance Pretty dec => Pretty (NewickTree dec) where
  pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (show name)
  pPrint (NTInterior dec ls) = "NTInterior" <+> pPrint dec <+> pPrint ls
 
+instance (Pretty k, Pretty v) => Pretty (M.Map k v) where
+  pPrint mp = pPrint (M.toList mp)
 
 -- | Display a tree WITH the bootstrap and branch lengths.
-displayDefaultTree :: LabelTable -> NewickTree DefDecor -> Doc
-displayDefaultTree mp (NTLeaf (Nothing,_) name)   = text (mp M.! name)
-displayDefaultTree mp (NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
-displayDefaultTree mp (NTInterior (bootstrap,_) ls) = 
+displayDefaultTree :: (LabelTable, NewickTree DefDecor) -> Doc
+displayDefaultTree (mp,NTLeaf (Nothing,_) name)   = text (mp M.! name)
+displayDefaultTree (mp,NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
+displayDefaultTree (mp,NTInterior (bootstrap,_) ls) = 
    case bootstrap of
      Nothing -> base
      Just val -> base <> text ":[" <> text (show val) <> text "]"
  where
-   base = parens$ sep$ map_but_last (<>text",") $ map (displayDefaultTree mp) ls
+   base = parens$ sep$ map_but_last (<>text",") $ map (curry displayDefaultTree mp) ls
 
 
 ----------------------------------------------------------------------------------------------------
@@ -114,9 +116,8 @@ type LabelTable = M.Map Label String
 -- BRANCHLENGTH.  The bootstrap values, if present, will range in [0..100]
 type DefDecor = (Maybe Int, BranchLen)
 
--- | A common type of tree is "AnnotatedTree", which contains the standard decorator
--- and also a table for restoring the human-readable node names.
-type AnnotatedTree = (LabelTable, NewickTree StandardDecor)
+-- | Additionally includes some scratch data that is used by the binning algorithm.
+type AnnotatedTree = NewickTree StandardDecor
 
 -- | The standard decoration includes everything in `DefDecor` plus
 --   some extra cached data:
@@ -139,11 +140,17 @@ data StandardDecor = StandardDecor {
  }
  deriving (Show,Read,Eq,Ord)
 
+-- | A common type of tree contains the standard decorator and also a table for
+-- restoring the human-readable node names.
+type FullTree = (LabelTable, AnnotatedTree)
+
+
 instance Pretty StandardDecor where 
  pPrint (StandardDecor bl bs wt ls) = parens$
     "StandardDecor" <+> hsep [pPrint bl, pPrint bs
 --                             , pPrint wt, pPrint ls
                              ]
+
 
 ----------------------------------------------------------------------------------------------------
 -- * Configuring and running the command line tool.
@@ -153,7 +160,7 @@ instance Pretty StandardDecor where
 data PhyBinConfig = 
   PBC { verbose :: Bool
       , num_taxa :: Int
-      , name_hack :: Label -> Label
+      , name_hack :: String -> String
       , output_dir :: String
       , inputs :: [String]
       , do_graph :: Bool
