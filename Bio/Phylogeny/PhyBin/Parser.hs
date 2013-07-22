@@ -15,14 +15,15 @@ import           Test.HUnit          ((~:),(~=?),Test,test,assertFailure)
 import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, treeSize, LabelTable)
 import           Prelude as P
 
+type NameHack = (String->String)
 
 -- | Parse a bytestring into a NewickTree with branch lengths.  The
 --   first argument is file from which the data came and is just for
 --   better error messages.
-parseNewick :: String -> B.ByteString -> (LabelTable, NewickTree DefDecor)
-parseNewick file input =
-  extractLabelTable $ 
-  runB file newick_parser $
+parseNewick :: LabelTable -> NameHack -> String -> B.ByteString -> (LabelTable, NewickTree DefDecor)
+parseNewick tbl0 name_hack file input =
+  extractLabelTable tbl0 $ 
+  runB file (newick_parser name_hack) $
   B.filter (not . isSpace) input
 
 runB :: Show a => String -> Parser a -> B.ByteString -> a
@@ -30,9 +31,8 @@ runB file p input = case (parse p "" input) of
 	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
 		 Right x  -> x
 
-
-extractLabelTable :: TempTree -> (LabelTable, NewickTree DefDecor)
-extractLabelTable tr = loop M.empty tr
+extractLabelTable :: LabelTable -> TempTree -> (LabelTable, NewickTree DefDecor)
+extractLabelTable tbl0 tr = loop tbl0 tr
  where
    loop acc (NTLeaf (d,Just nm) _) =
      let nxt = M.size acc in
@@ -44,6 +44,7 @@ extractLabelTable tr = loop M.empty tr
                    (acc3, x':ls))
                  (acc1,[]) chlds
      in (acc', NTInterior d ls')
+
 ----------------------------------------------------------------------------------------------------
 -- Newick file format parser definitions:
 ----------------------------------------------------------------------------------------------------
@@ -58,43 +59,49 @@ tag l s =
     NTInterior (_,Nothing) ls -> NTInterior (l,Nothing) ls
 
 -- | This parser ASSUMES that whitespace has been prefiltered from the input.
-newick_parser :: Parser TempTree
-newick_parser = 
-   do x <- subtree
+newick_parser :: NameHack -> Parser TempTree
+newick_parser name_hack = 
+   do x <- subtree name_hack
       -- Get the top-level metadata:
-      l <- branchMetadat
+      l <- branchMetadat name_hack
       _ <- char ';'
       return$ tag l x
 
-subtree :: Parser TempTree
-subtree = internal <|> leaf
+subtree :: NameHack -> Parser TempTree
+subtree name_hack = internal name_hack <|> leaf name_hack
 
 defaultMeta :: (Maybe Int, Double)
 defaultMeta = (Nothing,0.0)
 
-leaf :: Parser TempTree
-leaf = do nm<-name; return$ NTLeaf (defaultMeta,Just nm) 0 
+leaf :: NameHack -> Parser TempTree
+leaf name_hack =
+  do nm <- name
+     let nm' = name_hack nm
+     return$ NTLeaf (defaultMeta,Just nm') 0 
 
-internal :: Parser TempTree
-internal = do _   <- char '('       
-	      bs  <- branchset
-	      _   <- char ')'       
-              _nm <- name -- IGNORED, internal names.
-              return$ NTInterior (defaultMeta,Nothing) bs
+internal :: NameHack -> Parser TempTree
+internal name_hack =
+   do _   <- char '('       
+      bs  <- branchset name_hack
+      _   <- char ')'       
+      _nm <- name -- IGNORED, internal names.
+      return$ NTInterior (defaultMeta,Nothing) bs
 
-branchset :: Parser [TempTree]
-branchset =
-    do b <- branch <?> "at least one branch"
-       rest <- option [] $ try$ do char ','; branchset
+branchset :: NameHack -> Parser [TempTree]
+branchset name_hack =
+    do b <- branch name_hack <?> "at least one branch"
+       rest <- option [] $ try$ do char ','; branchset name_hack
        return (b:rest)
 
-branch :: Parser TempTree
-branch = do s<-subtree; l<-branchMetadat; 
-	    return$ tag l s
+branch :: NameHack -> Parser TempTree
+branch name_hack =
+         do s <- subtree name_hack
+            l <- branchMetadat name_hack 
+            return$ tag l s
 
 -- If the length is omitted, it is implicitly zero.
-branchMetadat :: Parser DefDecor 
-branchMetadat = option defaultMeta $ do
+branchMetadat :: NameHack -> Parser DefDecor 
+branchMetadat name_hack = option defaultMeta $ do
     char ':'
     n <- (try sciNotation <|> number)
     -- IF the branch length succeeds then we go for the bracketed bootstrap value also:
@@ -136,7 +143,7 @@ name = option "" $ many1 (noneOf "()[]:;, \t\n\r\f\v")
 --------------------------------------------------------------------------------
 
 tre1 :: NewickTree DefDecor
-tre1 = snd $ parseNewick "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+tre1 = snd $ parseNewick M.empty id "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
 unitTests :: Test
 unitTests = test
@@ -145,24 +152,24 @@ unitTests = test
    , "test number" ~:  3.0  ~=?  run number "3"
    , "test number" ~:  -3.0 ~=?  run number "-3"
 
-   , "leaf"     ~: ntl "A" ~=?  run leaf    "A"
-   , "subtree"  ~: ntl "A" ~=?  run subtree "A"
+   , "leaf"     ~: ntl "A" ~=?  run (leaf id)    "A"
+   , "subtree"  ~: ntl "A" ~=?  run (subtree id) "A"
 
      -- These are not allowed:
-   , "null branchset" ~: errortest$ run branchset ""
+   , "null branchset" ~: errortest$ run (branchset id) ""
      
-   , "internal" ~: NTInterior nada [ntl "A"] ~=?  run internal "(A);"
+   , "internal" ~: NTInterior nada [ntl "A"] ~=?  run (internal id) "(A);"
    , "example: no nodes are named"  ~: NTInterior nada
                                          [ntl "", ntl "", NTInterior nada [ntl "", ntl ""]]
-        			   ~=? run newick_parser "(,,(,));"
-   , "example: leaf nodes are named" ~: 6 ~=?  treeSize (run newick_parser "(A,B,(C,D));")
-   , "example: all nodes are named"  ~: 6 ~=?  treeSize (run newick_parser "(A,B,(C,D)E)F;")
+        			   ~=? run (newick_parser id) "(,,(,));"
+   , "example: leaf nodes are named" ~: 6 ~=?  treeSize (run (newick_parser id) "(A,B,(C,D));")
+   , "example: all nodes are named"  ~: 6 ~=?  treeSize (run (newick_parser id) "(A,B,(C,D)E)F;")
 
-   , "example: all but root node have a distance to parent"  ~: 6 ~=? treeSize (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5);")
-   , "example: all have a distance to parent"              ~: 6 ~=? treeSize (run newick_parser "(:0.1,:0.2,(:0.3,:0.4):0.5):0.6;")
+   , "example: all but root node have a distance to parent"  ~: 6 ~=? treeSize (run (newick_parser id) "(:0.1,:0.2,(:0.3,:0.4):0.5);")
+   , "example: all have a distance to parent"              ~: 6 ~=? treeSize (run (newick_parser id) "(:0.1,:0.2,(:0.3,:0.4):0.5):0.6;")
    , "example: distances and leaf names (popular)"         ~: 6 ~=? treeSize tre1
-   , "example: distances and all names"                    ~: 6 ~=? treeSize (run newick_parser "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;")
-   , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? treeSize (run newick_parser "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
+   , "example: distances and all names"                    ~: 6 ~=? treeSize (run (newick_parser id) "(A:0.1,B:0.2,(C:0.3,D:0.4)E:0.5)F;")
+   , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? treeSize (run (newick_parser id) "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
    ]
  where
   ntl s = NTLeaf ((Nothing,0.0),Just s) 0

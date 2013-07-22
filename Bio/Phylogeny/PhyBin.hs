@@ -13,8 +13,8 @@ module Bio.Phylogeny.PhyBin
        where
 
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort)
-import           Data.Maybe          (fromMaybe)
+import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort, unzip4)
+import           Data.Maybe          (fromMaybe, catMaybes)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
@@ -169,13 +169,13 @@ verify_sorted msg =
 
 -- TODO: Salvage any of these tests that are worthwhile and get them into the unit tests:	        	
 tt :: AnnotatedTree
-tt = normalize $ annotateWLabLists $ snd$ parseNewick "" "(A,(C,D,E),B);"
+tt = normalize $ annotateWLabLists $ snd$ parseNewick M.empty id "" "(A,(C,D,E),B);"
 
 norm4 :: FullTree
 norm4 = norm "((C,D,E),B,A);"
 
 norm5 :: AnnotatedTree
-norm5 = normalize$ annotateWLabLists$ snd$ parseNewick "" "(D,E,C,(B,A));"
+norm5 = normalize$ annotateWLabLists$ snd$ parseNewick M.empty id "" "(D,E,C,(B,A));"
 
 
 ----------------------------------------------------------------------------------------------------
@@ -302,23 +302,22 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
     -- Next, parse the files and do error checking and annotation.
     --------------------------------------------------------------------------------
-    --
-    -- results contains: num-nodes, parsed, warning-files   
+ 
 
     case branch_collapse_thresh of 
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
       Nothing  -> return ()
 
-    results :: [(Int, [NewickTree DefDecor], [(Int, String)])] <- forM files $ \ file -> 
-      do --stat <- getFileStatus file		 
-	 reg <- is_regular_file file
-	 if not reg then return (0,[],[(-1, file)]) else do
+    -- results contains: label-maps, num-nodes, parsed, warning-files
+    results <- forM files $ \ file -> 
+      do reg <- is_regular_file file
+	 if not reg then return (Nothing, 0,[],[(-1, file)]) else do
 
            h <- openFile file ReadMode 
 	   bstr <- B.hGetContents h
 
            -- Clip off the first three characters:
-           let (labtbl, parsed0) = parseNewick file bstr
+           let (labtbl, parsed0) = parseNewick M.empty name_hack file bstr
                parsed = parsed0 -- map_labels name_hack parsed0 -- FIXME: put nameHack back...
                collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
@@ -339,7 +338,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: file contained unexpected number of leaves ("
 					    ++ show weight ++"): "++ show file
-		    return (0,[], [(weight, file)])
+		    return (Just labtbl, 0,[], [(weight, file)])
 	    else do 
 	     when verbose$ putStr "."
 
@@ -348,11 +347,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
 
 	     hClose h
 	     --return$ (num, [normal])
-	     return$ (num, [pruned], [])
+	     return$ (Just labtbl, num, [pruned], [])
 
-    putStrLn$ "\nNumber of input trees: " ++ show num_files
-    putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat$ map snd3 results)
-    putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum$ map fst3 results)
+    let (lbltbls0, counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip4 results
+        lbtbls = catMaybes lbltbls0
+    putStrLn$ "\nNumber of input tree files: " ++ show num_files
+    putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat validtrees)
+    putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
 
     --------------------------------------------------------------------------------
     -- Do the actual binning:
@@ -361,13 +362,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     putStrLn$ "Creating equivalence classes (bins)..."
 
     let classes = --binthem_normed$ zip files $ concat$ map snd3 results
-	          binthem$  zip files $ concat$ map snd3 results
+	          binthem$  zip files $ concat validtrees
 	binlist = reverse $ sortBy (compare `on` fst3) $
 		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
 	numbins = length binlist
         taxa :: S.Set Int
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
-	warnings = concat $ map thd3 results
+	warnings = concat pairs
 	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
 
         binsizes = map fst3 binlist
@@ -641,7 +642,7 @@ subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =
 ----------------------------------------------------------------------------------------------------
 
 tre1 :: (LabelTable, NewickTree DefDecor)
-tre1 = parseNewick "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+tre1 = parseNewick M.empty id "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
 tre1draw :: IO (Chan (), FullTree)
 tre1draw = viewNewickTree "tre1"$ (fst tre1, annotateWLabLists (snd tre1))
@@ -655,7 +656,7 @@ norm = norm2 . B.pack
 norm2 :: B.ByteString -> FullTree
 norm2 bstr = (tbl, normalize $ annotateWLabLists tr)
   where
-    (tbl,tr) = parseNewick "test" bstr
+    (tbl,tr) = parseNewick M.empty id "test" bstr
 
 unitTests :: Test
 unitTests = 
@@ -685,9 +686,9 @@ unitTests =
 
    , "phbin: these 3 trees should fall in the same category" ~: 
       1 ~=? (length $ M.toList $
-             binthem [("one",   snd$parseNewick "" "(A,(C,D,E),B);"),
- 		      ("two",   snd$parseNewick "" "((C,D,E),B,A);"),
-		      ("three", snd$parseNewick "" "(D,E,C,(B,A));")])
+             binthem [("one",   snd$parseNewick M.empty id "" "(A,(C,D,E),B);"),
+ 		      ("two",   snd$parseNewick M.empty id "" "((C,D,E),B,A);"),
+		      ("three", snd$parseNewick M.empty id "" "(D,E,C,(B,A));")])
       
    , "dotConversion" ~: True ~=? 100 < length (show $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
    ]

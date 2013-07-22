@@ -160,7 +160,7 @@ main =
                           let fn f = do raw <- B.readFile f
                                         let ls = map (`B.append` (B.pack ";")) $ 
                                                  B.splitWith (== ';') raw
-                                        return (map (annotateWLabLists . snd . (parseNewick f)) ls)
+                                        return (map (annotateWLabLists . snd . (parseNewick M.empty id f)) ls)
                           trees <- concat <$> mapM fn treeFiles
                           putStrLn$ "Read trees! "++show (length trees)
                           printDistMat (distanceMatrix trees)
@@ -204,8 +204,7 @@ view_graphs PBC{..} =
                 putStrLn$ "Drawing "++ file ++"...\n"
 		str <- B.readFile file
 		putStrLn$ "Parsed: " ++ (B.unpack str)
-                let (tbl,tr) = -- map_labels name_hack $ -- FIXME
-                               parseNewick file str
+                let (tbl,tr) = parseNewick M.empty name_hack file str
  	        (chan, _tr) <- viewNewickTree file (tbl, annotateWLabLists tr)
 	        return chan
 	      forM_ chans readChan 
