@@ -47,7 +47,8 @@ Executable phybin
                      HSH, HUnit, bytestring, 
                      -- For bytestring.lazy support:
                      parsec >= 3.1.0, 
-                     lattice-par, bitvec >= 0.1, vector >= 0.10
+                     lattice-par, bitvec >= 0.1, vector >= 0.10,
+                     hierarchical-clustering >= 0.4
 
 --  extensions: CPP
 --   extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances

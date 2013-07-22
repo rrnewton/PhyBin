@@ -24,6 +24,9 @@ import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
 import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat)
 
+import qualified Data.Clustering.Hierarchical as C
+
+
 import Version
 
 ----------------------------------------------------------------------------------------------------
@@ -45,12 +48,14 @@ data Flag
 
     | SelfTest
     | RFMatrix
+    | Cluster C.Linkage
 
     | NameCutoff String
     | NamePrefix Int
     | NameTable String  -- Must come after Cutoff/Prefix
 
   deriving (Show, Eq, Ord) -- ORD is really used.
+
 
 parseTabDelim :: String -> Flag
 parseTabDelim _str = 
@@ -61,18 +66,31 @@ options =
      [ Option ['v']     ["verbose"] (NoArg Verbose)    "print WARNINGS and other information (recommended at first)"
      , Option ['V']     ["version"] (NoArg Version)    "show version number"
 
-     , Option ['o']     ["output"]  (ReqArg Output "DIR")  "set directory to contain all output files (default \"./\")"
+     , Option ['o']     ["output"]  (ReqArg Output "DIR")  "set directory to contain all output files (default \"./phybin_out/\")"
 
      , Option []     ["selftest"]   (NoArg SelfTest)   "run internal unit tests"
 
      , Option []     ["rfdist"]     (NoArg RFMatrix)   "print a Robinson Foulds distance matrix for the input trees"
 
+--     , Option []     ["rfdist"]     (NoArg RFMatrix)   "print a Robinson Foulds distance matrix for the input trees"
+       
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option []        []          (NoArg NullOpt)  ""
      , Option ['t']     ["tabbed"]  (ReqArg parseTabDelim "NUM1:NUM2")$  "assume the input is a tab-delimited file with gene names \n"++
 		                                                        "in column NUM1 and Newick trees in NUM2"
--}
+-}       
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Clustering Options ------------------------------"
 
+     , Option []    ["bin"]      (NoArg View)$  "Use simple binning, the cheapest form of 'clustering'"
+     , Option []    ["single"]   (NoArg View)$  "Use single-linkage clustering (nearest neighbor)"
+     , Option []    ["complete"] (NoArg View)$  "Use complete-linkage clustering (furthest neighbor)"
+     , Option []    ["UPGMA"]    (NoArg View)$  "Use Unweighted Pair Group Method (average linkage)"
+
+     , Option []    ["editdist"]  (ReqArg (BranchThresh . read) "DIST")$
+                                  "Report a flat set of clusters that are separated by at least the given [tree edit] distance"
+     , Option []    ["dendogram"] (NoArg View)$ "Report a hierarchical clustering (default)"
+       
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
      , Option ['g']     ["graphbins"] (NoArg Graph)  "use graphviz to produce .dot and .pdf output files named bin1.*, bin2.*, etc"
@@ -81,24 +99,26 @@ options =
      , Option ['w']     ["view"]    (NoArg View)$  "for convenience, \"view mode\" simply displays input Newick files without binning" 
 
      , Option []        []          (NoArg NullOpt)  ""
-     , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Handling taxa names ----------------------------"
+     , Option []        []  (NoArg$ error "internal problem")  "---------------------------- Tree pre-processing -----------------------------"
+
+     , Option ['n']     ["numtaxa"] (ReqArg (NumTaxa . read) "NUM") "expect NUM taxa for this dataset"
+
+     , Option ['b']     ["branchcut"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
+              
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Extracting taxa names ----------------------------"
 --     , Option ['n']     ["numtaxa"] (ReqArg (NumTaxa . read) "NUM") "expect NUM taxa for this dataset (otherwise it will guess)"
        --  TODO, FIXME: The "guessing" part doesn't actually work yet -- implement it!!
        --  What's a good algorithm?  Insist they all have the same number?  Take the mode?
        
-     , Option ['n']     ["numtaxa"] (ReqArg (NumTaxa . read) "NUM") "expect NUM taxa for this dataset"
-
-     , Option ['b']     ["branchcut"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
-       
-
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option ['f']     ["force"]   (NoArg Force)    "force phybin to consume and bin trees with different numbers of taxa"
 -}
      , Option []        []          (NoArg NullOpt)  ""
      , Option ['p']     ["nameprefix"]  (ReqArg (NamePrefix . read) "NUM") $ 
-		  "Leaf names in the input Newick trees are usually gene names, not taxa.\n"++
-    	    	  "It is typical to extract taxa names from genes.  This option extracts a\n"++
-                  "prefix of NUM characters to serve as the taxa name."
+		  "Leaf names in the input Newick trees can be gene names, not taxa.\n"++
+    	    	  "Then it is typical to extract taxa names from genes.  This option extracts\n"++
+                  "a prefix of NUM characters to serve as the taxa name."
 
      , Option []        []          (NoArg NullOpt)  ""
      , Option ['s']     ["namesep"]   (ReqArg NameCutoff "STR") $  --"\n"++
@@ -117,15 +137,34 @@ options =
 usage :: String
 usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
 
+--        "MODE must be one of 'bin' or 'cluster'.\n\n" ++
+
         "PhyBin takes Newick tree files as input.  Paths of Newick files can\n"++
         "be passed directly on the command line.  Or, if directories are provided,\n"++
-        "all files in those directories will be read.\n\n"++
+        "all files in those directories will be read.  Taxa are named based on the files\n"++
+        "containing them.  If a file contains multiple trees, all are read by phybin, and\n"++  
+        "the taxa name then includes a suffix indicating the position in the file:\n"++
+        " e.g. FILENAME_0, FILENAME_1, etc.\n"++
+        "\n"++          
 
-        "Phybin output contains, at minimum, files of the form binXX_YY.tr,\n"++
-        "each containing a list of input file paths that fall into that bin.\n\n"++
+        -- "In binning mode, Phybin output contains, at minimum, files of the form binXX_YY.tr,\n"++
+        -- "each containing a list of input file paths that fall into that bin.  XX signifies\n"++
+        -- "the rank of the bin (biggest first), and YY is how many trees it contains.\n"++
+        -- "\n"++        
 
-	"USAGE NOTES: Currently phybin ignores input trees with the wrong number of taxa.\n"++
-	"If given a directory as input phybin will assume all contained files are Newick trees.\n\n"++
+        "When clustering trees, Phybin computes a complete all-to-all Robinson-Foulds distance matrix.\n"++
+        "If a threshold distance (tree edit distance) is given, then a flat set of clusters\n"++
+        "will be produced in files clusterXX_YY.tr.  Otherwise it produces a full dendogram (UNFINISHED).\n"++
+        "\n"++  
+
+        "Binning mode provides an especially quick-and-dirty form of clustering.\n"++
+        "When running with the --bin option, only exactly equal trees are put in the same cluster.\n"++
+        "Tree pre-processing still applies, however: for example collapsing short branches.\n"++
+        "\n"++        
+
+	"USAGE NOTES: \n"++
+        " * Currently phybin ignores input trees with the wrong number of taxa.\n"++
+	" * If given a directory as input phybin will assume all contained files are Newick trees.\n\n"++
 
 	"\nOptions include:\n"
 

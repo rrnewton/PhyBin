@@ -19,7 +19,7 @@ import           Data.Maybe          (fromMaybe, catMaybes)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
-import           Control.Monad       (forM, forM_, filterM, when)
+import           Control.Monad       (forM, forM_, filterM, when, unless)
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
@@ -27,6 +27,8 @@ import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
 import           System.IO           (openFile, hClose, IOMode(ReadMode))
+import           System.Process      (system)
+import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
 import qualified HSH 
 
@@ -297,6 +299,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     files <- acquireTreeFiles inputs
     let num_files = length files
 
+    bl <- doesDirectoryExist output_dir
+    unless bl $ do
+      c <- system$ "mkdir -p "++output_dir
+      case c of
+        ExitSuccess   -> return ()
+        ExitFailure c -> error$"Could not create output directory. 'mkdir' command failed with: "++show c
+    
     putStrLn$ "Parsing "++show num_files++" Newick tree files."
     --putStrLn$ "\nFirst ten \n"++ concat (map (++"\n") $ map show $ take 10 files)
 
