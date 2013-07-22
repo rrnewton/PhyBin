@@ -35,7 +35,7 @@ import qualified HSH
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
-import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
+import           Bio.Phylogeny.PhyBin.Parser (parseNewick, parseNewicks)
 import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 import           Bio.Phylogeny.PhyBin.RFDistance
@@ -75,7 +75,9 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --------------------------------------------------------------------------------
     -- Next, parse the files and do error checking and annotation.
     --------------------------------------------------------------------------------
- 
+
+    bstrs <- mapM B.readFile files
+    let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
 
     case branch_collapse_thresh of 
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr

@@ -49,6 +49,9 @@ data Flag
     | SelfTest
     | RFMatrix
     | Cluster C.Linkage
+    | BinningMode
+    | EditDistThresh Int
+    | DendogramOnly
 
     | NameCutoff String
     | NamePrefix Int
@@ -82,18 +85,19 @@ options =
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Clustering Options ------------------------------"
 
-     , Option []    ["bin"]      (NoArg View)$  "Use simple binning, the cheapest form of 'clustering'"
-     , Option []    ["single"]   (NoArg View)$  "Use single-linkage clustering (nearest neighbor)"
-     , Option []    ["complete"] (NoArg View)$  "Use complete-linkage clustering (furthest neighbor)"
-     , Option []    ["UPGMA"]    (NoArg View)$  "Use Unweighted Pair Group Method (average linkage)"
+     , Option []    ["bin"]      (NoArg BinningMode)$  "Use simple binning, the cheapest form of 'clustering'"
+     , Option []    ["single"]   (NoArg$ Cluster C.SingleLinkage)  $  "Use single-linkage clustering (nearest neighbor)"
+     , Option []    ["complete"] (NoArg$ Cluster C.CompleteLinkage)$  "Use complete-linkage clustering (furthest neighbor)"
+     , Option []    ["UPGMA"]    (NoArg$ Cluster C.UPGMA)          $  "Use Unweighted Pair Group Method (average linkage)"
 
-     , Option []    ["editdist"]  (ReqArg (BranchThresh . read) "DIST")$
-                                  "Report a flat set of clusters that are separated by at least the given [tree edit] distance"
-     , Option []    ["dendogram"] (NoArg View)$ "Report a hierarchical clustering (default)"
+     , Option []    ["editdist"]  (ReqArg (EditDistThresh . read) "DIST")$
+                                  "Report a flat set of clusters that are separated by at least the given tree edit-distance"
+     , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
-     , Option ['g']     ["graphbins"] (NoArg Graph)  "use graphviz to produce .dot and .pdf output files named bin1.*, bin2.*, etc"
+     , Option ['g']     ["graphbins"] (NoArg Graph)  "use graphviz to produce .dot and .pdf output files named cluster1.*, cluster2.*, etc"
+-- TODO: Produce the consensus tree as well as the individual trees.
      , Option ['d']     ["drawbins"]  (NoArg Draw)   "like -g, but open GUI windows to show a tree for each bin"
 
      , Option ['w']     ["view"]    (NoArg View)$  "for convenience, \"view mode\" simply displays input Newick files without binning" 
