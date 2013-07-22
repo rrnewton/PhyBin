@@ -196,21 +196,7 @@ main =
 
 	   SelfTest -> do _ <- runTestTT allUnitTests; exitSuccess
 
-     	   RFMatrix -> do -- Expand wildcards, etc:
-                          treeFiles <- acquireTreeFiles files
-                          let fn f = do raw <- B.readFile f
-                                        let ls = map (`B.append` (B.pack ";")) $ 
-                                                 B.splitWith (== ';') raw
-                                        return (map (f,) ls)
-                          trees0 <- concat <$> mapM fn treeFiles
-                          -- FIXME: no name_hack here:
-                          let (lbls, trees) = parseNewicks id trees0 
-                          putStrLn$ "Read trees! "++show (length trees)
-                          putStrLn$ "Taxa: "++show (pPrint lbls)
---                          putStrLn$ "First tree: "++show (pPrint (head trees))
-                          putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
-                          printDistMat$ distanceMatrix$ map nwtree trees
-                          exitSuccess
+     	   RFMatrix -> return cfg { print_rfmatrix= True }
 
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
            BinningMode -> return cfg { clust_mode = BinThem }

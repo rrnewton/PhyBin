@@ -59,8 +59,10 @@ bipSize            = SI.size
 -- Dirt-simple reference implementation
 --------------------------------------------------------------------------------
 
+type DistanceMatrix = V.Vector (U.Vector Int)
+
 -- | Returns a triangular distance matrix encoded as a vector.
-distanceMatrix :: [NewickTree a] -> V.Vector (U.Vector Int)
+distanceMatrix :: [NewickTree a] -> DistanceMatrix
 distanceMatrix lst = 
    let sz = P.length lst
        eachbips = V.fromList $ map allBips lst

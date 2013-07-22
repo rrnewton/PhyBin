@@ -54,7 +54,8 @@ debug = True
 -- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
 driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
-            do_graph, branch_collapse_thresh, dist_thresh, clust_mode } =
+            do_graph, branch_collapse_thresh,
+            dist_thresh, clust_mode, print_rfmatrix } =
    -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
@@ -68,8 +69,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     unless bl $ do
       c <- system$ "mkdir -p "++output_dir
       case c of
-        ExitSuccess   -> return ()
-        ExitFailure c -> error$"Could not create output directory. 'mkdir' command failed with: "++show c
+        ExitSuccess     -> return ()
+        ExitFailure cde -> error$"Could not create output directory. 'mkdir' command failed with: "++show cde
     
     putStrLn$ "Parsing "++show (length files)++" Newick tree files."
     --putStrLn$ "\nFirst ten \n"++ concat (map (++"\n") $ map show $ take 10 files)
@@ -137,7 +138,22 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     classes <- case clust_mode of
       BinThem         -> doBins validtrees 
       ClusterThem lnk -> do
-        dendro <- doCluster lnk validtrees
+        (mat, dendro) <- doCluster lnk validtrees
+        case print_rfmatrix of
+          False -> return ()
+          True -> do -- treeFiles <- acquireTreeFiles files
+                     -- let fn f = do raw <- B.readFile f
+                     --               let ls = map (`B.append` (B.pack ";")) $ 
+                     --                        B.splitWith (== ';') raw
+                     --               return (map (f,) ls)
+                     -- trees0 <- concat <$> mapM fn treeFiles
+                     -- FIXME: no name_hack here:
+                     -- let (lbls, trees) = parseNewicks id trees0 
+                     -- putStrLn$ "Read trees! "++show (length trees)
+                     -- putStrLn$ "Taxa: "++show (pPrint lbls)
+                     -- putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
+                     printDistMat mat
+        
         case dist_thresh of
           Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
           Just dstThresh -> do
@@ -167,8 +183,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size)
     putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n"++ 
 	      show (nest 2 $ sep $ map text $ M.elems labelTab)
-
-    let fixme_HERE = error "fixme_HERE"
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . map nwtree . clustMembers . thd3) binlist
@@ -235,7 +249,7 @@ doBins validtrees = do
 	          binthem validtrees
     return (classes)
 
-doCluster :: C.Linkage -> [FullTree a] -> IO (C.Dendrogram (FullTree a))
+doCluster :: C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
 doCluster linkage validtrees = do
   putStrLn$ "Clustering using method "++show linkage
   let nwtrees  = map nwtree validtrees
@@ -244,8 +258,8 @@ doCluster linkage validtrees = do
       dist (i,t1) (j,t2) | j == i     = 0
                          | j < i      = fromIntegral ((mat V.! i) U.! j)
                          | otherwise  = fromIntegral ((mat V.! j) U.! i)
-  return $ fmap snd $
-    C.dendrogram linkage ixtrees dist
+      dendro = fmap snd $ C.dendrogram linkage ixtrees dist
+  return (mat,dendro)
   
 reportClusts :: BinResults StandardDecor -> IO [(Int, StrippedTree, OneCluster StandardDecor)]
 reportClusts classes = do 
