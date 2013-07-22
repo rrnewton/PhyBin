@@ -199,12 +199,12 @@ default_phybin_config =
 -- * Simple utility functions for the core types:
 ----------------------------------------------------------------------------------------------------
 
--- | How many leaf nodes (leaves and interior) are contained in a NewickTree?
+-- | How many nodes (leaves and interior) are contained in a NewickTree?
 treeSize :: NewickTree a -> Int
 treeSize (NTLeaf _ _) = 1
 treeSize (NTInterior _ ls) = 1 + sum (map treeSize ls)
 
--- | This counts only leaf nodes.
+-- | This counts only leaf nodes, which should include all taxa.
 numLeaves :: NewickTree a -> Int
 numLeaves (NTLeaf _ _) = 1
 numLeaves (NTInterior _ ls) = sum (map numLeaves ls)

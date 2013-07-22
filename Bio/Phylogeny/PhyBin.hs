@@ -16,6 +16,7 @@ import qualified Data.Foldable as F
 import           Data.Function       (on)
 import           Data.List           (delete, minimumBy, sortBy)
 import           Data.Maybe          (fromMaybe)
+import           Data.Either         (partitionEithers)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
@@ -60,8 +61,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     --putStrLn$ "PHYBIN RUNNING IN DIRECTORY: "++ cd
 
     files <- acquireTreeFiles inputs
-    let num_files = length files
-
     bl <- doesDirectoryExist output_dir
     unless bl $ do
       c <- system$ "mkdir -p "++output_dir
@@ -69,65 +68,64 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
         ExitSuccess   -> return ()
         ExitFailure c -> error$"Could not create output directory. 'mkdir' command failed with: "++show c
     
-    putStrLn$ "Parsing "++show num_files++" Newick tree files."
+    putStrLn$ "Parsing "++show (length files)++" Newick tree files."
     --putStrLn$ "\nFirst ten \n"++ concat (map (++"\n") $ map show $ take 10 files)
 
     --------------------------------------------------------------------------------
     -- Next, parse the files and do error checking and annotation.
     --------------------------------------------------------------------------------
 
-    bstrs <- mapM B.readFile files
+    (goodFiles,warnings) <- fmap partitionEithers $
+      forM files $ \ file -> do
+           reg <- is_regular_file file
+  	   if reg
+             then return$ Left file
+             else return$ Right file
+    let num_files = length goodFiles
+    bstrs <- mapM B.readFile goodFiles
     let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
+
+    --------------------------------------------------------------------------------
 
     case branch_collapse_thresh of 
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
       Nothing  -> return ()
 
-    let dofile :: LabelTable -> String -> IO (LabelTable, (Int,[NewickTree DefDecor],[(Int, String)]))
-        dofile lblAcc file = do 
-         reg <- is_regular_file file
-	 if not reg then return (lblAcc, (0,[],[(-1, file)])) else do
-
-           h <- openFile file ReadMode 
-	   bstr <- B.hGetContents h
-
-           -- Clip off the first three characters:
-           let (lblAcc', parsed) = parseNewick lblAcc name_hack file bstr
+    let do_one :: FullTree DefDecor -> IO (Int, [NewickTree DefDecor], [(Int, String)])
+        do_one (FullTree treename lblAcc parsed) = do 
+           let 
                collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
                          Nothing  -> parsed
                          Just thr -> collapseBranches ((< thr) . snd) collapser parsed
-	       annot  = annotateWLabLists pruned
-	       normal = normalize annot
-	       weight = get_weight annot
-
+--	       annot  = annotateWLabLists pruned
+--	       normal = normalize annot
+--	       weight = get_weight annot
+               numL   = numLeaves pruned
+               
            -- TEMPTOGGLE
-	   when False $ do putStrLn$ "DRAWING TREE"
-                           viewNewickTree "Annotated"  (FullTree file lblAcc' annot)
-                           viewNewickTree "Normalized" (FullTree file lblAcc' normal)
-			   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
-                                 show (map get_weight$ get_children normal)
+	   -- when False $ do putStrLn$ "DRAWING TREE"
+           --                 viewNewickTree "Annotated"  (FullTree file lblAcc' annot)
+           --                 viewNewickTree "Normalized" (FullTree file lblAcc' normal)
+	   --      	   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
+           --                       show (map get_weight$ get_children normal)
 
-           if not$ weight == num_taxa
+           if numL /= num_taxa
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
- 		    when verbose$ putStrLn$ "\n WARNING: file contained unexpected number of leaves ("
-					    ++ show weight ++"): "++ show file
-		    return (lblAcc', (0,[], [(weight, file)]))
+ 		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
+					    ++ show numL ++"): "++ treename
+		    return (0, [], [(numL, treename)])
 	    else do 
 	     when verbose$ putStr "."
-
-	     num <- evaluate$ treeSize pruned
-	     --num <- evaluate$ cnt normal
-
-	     hClose h
-	     --return$ (num, [normal])
-	     return$ (lblAcc', (num, [pruned], []))
+	     return$ (numL, [pruned], [])
              
     -- results contains: label-maps, num-nodes, parsed, warning-files             
-    (lbltbl,results) <- mapAccumM dofile M.empty files
+    results <- mapM do_one fulltrees
     let (counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip3 results
 
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
+    when (length warnings > 0) $
+      putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings)
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat validtrees)
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
 
@@ -173,8 +171,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs, do_graph, branch_c
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
 
-    putStrLn$ "\nTotal unique taxa ("++ show (M.size lbltbl) ++"):\n"++ 
-	      show (nest 2 $ sep $ map text $ M.elems lbltbl)
+    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n"++ 
+	      show (nest 2 $ sep $ map text $ M.elems labelTab)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
     let avgs = map (avg_trees . bintrees . thd3) binlist
