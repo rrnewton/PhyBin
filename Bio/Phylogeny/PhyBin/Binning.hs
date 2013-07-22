@@ -9,7 +9,7 @@
 module Bio.Phylogeny.PhyBin.Binning
        ( -- * Binning and normalization
          binthem, normalize, annotateWLabLists, 
-         deAnnotate, BinEntry(..),
+         deAnnotate, OneCluster(..), BinResults, StrippedTree,
          -- * Utilities and unit tests
          get_weight, unitTests
        )
@@ -189,10 +189,12 @@ norm5 = normalize$ annotateWLabLists$ snd$ parseNewick M.empty id "" "(D,E,C,(B,
 -- Equivalence classes on Trees:
 ----------------------------------------------------------------------------------------------------
 
--- | All the members of a BinEntry are isomorphic trees.
-data BinEntry = BE {
-   members :: [String], 
-   bintrees :: [AnnotatedTree]
+-- | When binning, the members of a OneCluster are isomorphic trees.  When clustering
+-- based on robinson-foulds distance they are merely similar trees.
+data OneCluster a = OneCluster {
+   members  :: [TreeName], 
+   bintrees :: [NewickTree a]
+   -- TODO : Get rid of this in favor of a simple list of FullTree..
 }
   deriving Show 
 
@@ -201,27 +203,27 @@ type StrippedTree = NewickTree Int
 
 -- | Index the results of binning by topology-only stripped trees
 --   that have their decorations removed.
-type BinResults = M.Map StrippedTree BinEntry
+type BinResults a = M.Map StrippedTree (OneCluster a)
 
 -- | The binning function.
 --   Takes labeled trees, classifies labels into equivalence classes.
-binthem :: [FullTree DefDecor] -> BinResults
+binthem :: [FullTree DefDecor] -> BinResults StandardDecor
 binthem ls = binthem_normed normalized
  where
   normalized = map (\ (FullTree n lab tree) ->
                      FullTree n lab (normalize $ annotateWLabLists tree)) ls
 
 -- | This version accepts trees that are already normalized:
-binthem_normed :: [FullTree StandardDecor] -> BinResults
+binthem_normed :: [FullTree StandardDecor] -> BinResults StandardDecor
 binthem_normed normalized = 
---   foldl (\ acc (lab,tree) -> M.insertWith update tree (BE{ members=[lab] }) acc)
+--   foldl (\ acc (lab,tree) -> M.insertWith update tree (OneCluster{ members=[lab] }) acc)
    foldl (\ acc (FullTree treename _ tree) ->
-           M.insertWith update (anonymize_annotated tree) (BE [treename] [tree]) acc)
+           M.insertWith update (anonymize_annotated tree) (OneCluster [treename] [tree]) acc)
 	 M.empty normalized
 	 --(map (mapSnd$ fmap (const ())) normalized) -- still need to STRIP them
  where 
--- update new old = BE{ members= (members new ++ members old) }
- update new old = BE (members new ++ members old) (bintrees new ++ bintrees old)
+-- update new old = OneCluster{ members= (members new ++ members old) }
+ update new old = OneCluster (members new ++ members old) (bintrees new ++ bintrees old)
  --strip = fmap (const ())
 
 -- | For binning. Remove branch lengths and labels but leave weights.

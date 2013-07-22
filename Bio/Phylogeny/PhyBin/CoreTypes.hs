@@ -9,7 +9,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          -- * Tree and tree decoration types
          NewickTree(..), 
          DefDecor, StandardDecor(..), AnnotatedTree, FullTree(..),
-         ClustMode(..),
+         ClustMode(..), TreeName,
          
          -- * Tree operations
          displayDefaultTree,
@@ -156,11 +156,13 @@ data StandardDecor = StandardDecor {
 -- | A common type of tree contains the standard decorator and also a table for
 -- restoring the human-readable node names.
 data FullTree a =
-  FullTree { treename   :: String
+  FullTree { treename   :: TreeName
            , labelTable :: LabelTable
            , nwtree     :: NewickTree a 
            }
  deriving (Show)
+
+type TreeName = String
 
 instance Pretty StandardDecor where 
  pPrint (StandardDecor bl bs wt ls) = parens$

@@ -20,6 +20,8 @@ import           Data.Either         (partitionEithers)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
+import qualified Data.Vector                 as V
+import qualified Data.Vector.Unboxed         as U
 import           Control.Monad       (forM, forM_, filterM, when, unless)
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
@@ -31,7 +33,6 @@ import           System.IO           (openFile, hClose, IOMode(ReadMode))
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
-import qualified HSH 
 import qualified Data.Clustering.Hierarchical as C
 
 -- For vizualization:
@@ -119,28 +120,33 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
 	     return$ (numL, [FullTree treename lblAcc pruned], [])
 
     results <- mapM do_one fulltrees
-    let (counts::[Int], validtrees, pairs::[[(Int, String)]]) = unzip3 results
-    let warnings2 = concat pairs
+    let (counts::[Int], validtreess, pairs::[[(Int, String)]]) = unzip3 results
+    let validtrees = concat validtreess
+        warnings2 = concat pairs
         
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
     when (length warnings2 > 0) $
       putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings2)
-    putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length$ concat validtrees)
+    putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length validtrees)
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
 
     --------------------------------------------------------------------------------
     -- Next, dispatch on the mode and do the actual clustering or binning.
     --------------------------------------------------------------------------------
 
-    ( binlist, classes) <- case clust_mode of
-      BinThem -> doBins files (concat validtrees) pairs output_dir
-      ClusterThem C.SingleLinkage   -> error "finishme"
-      ClusterThem C.CompleteLinkage -> error "finishme"
-      ClusterThem C.UPGMA           -> error "finishme"      
-      ClusterThem oth -> error$"internal error: unsupported clustering mode: "++show oth
-      
-    let numbins = length binlist
-	base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
+    classes <- case clust_mode of
+      BinThem         -> doBins validtrees 
+      ClusterThem lnk -> do
+        dendro <- doCluster lnk validtrees
+        case dist_thresh of
+          Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
+          Just dst ->
+            let loop (C.Leaf (FullTree{treename,nwtree})) =
+                  [OneCluster [treename] [annotateWLabLists nwtree]]
+            -- Flatten out the dendogram:
+            in -- return (clustsToMap $ loop dendro)
+               undefined (loop dendro)
+    binlist <- reportClusts classes
         
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
@@ -155,6 +161,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
 
+    let numbins = length binlist
+    let base i size = combine output_dir ("bin" ++ show i ++"_"++ show size)
     putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n"++ 
 	      show (nest 2 $ sep $ map text $ M.elems labelTab)
 
@@ -210,12 +218,29 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
 -- Driver helpers:
 --------------------------------------------------------------------------------
 
-doBins files validtrees pairs output_dir = do 
+-- doBins :: [FullTree DefDecor] -> t1 -> t2 -> IO BinResults
+doBins :: [FullTree DefDecor] -> IO (BinResults StandardDecor)
+doBins validtrees = do 
     putStrLn$ "Creating equivalence classes (bins)..."
-
     let classes = --binthem_normed$ zip files $ concat$ map snd3 results
 	          binthem validtrees
-	binlist = reverse $ sortBy (compare `on` fst3) $
+    return (classes)
+
+doCluster :: C.Linkage -> [FullTree a] -> IO (C.Dendrogram (FullTree a))
+doCluster linkage validtrees = do
+  putStrLn$ "Clustering using method "++show linkage
+  let nwtrees  = map nwtree validtrees
+      mat      = distanceMatrix nwtrees
+      ixtrees  = zip [0..] validtrees
+      dist (i,t1) (j,t2) | j == i     = 0
+                         | j < i      = fromIntegral ((mat V.! i) U.! j)
+                         | otherwise  = fromIntegral ((mat V.! j) U.! i)
+  return $ fmap snd $
+    C.dendrogram linkage ixtrees dist
+  
+reportClusts :: BinResults StandardDecor -> IO [(Int, StrippedTree, OneCluster StandardDecor)]
+reportClusts classes = do 
+    let binlist = reverse $ sortBy (compare `on` fst3) $
 		  map (\ (tr,ls) -> (length (members ls), tr, ls)) $ M.toList classes
         taxa :: S.Set Int
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
@@ -224,14 +249,18 @@ doBins files validtrees pairs output_dir = do
     putStrLn$ " [outcome] "++show (length binlist)++" bins found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
     putStrLn$"  ALL bin sizes, excluding singletons:"
-    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, BE{bintrees})) -> do
+    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, OneCluster{bintrees})) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$show$ 
            hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
                  vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees bintrees)++", "),
                        text "all: " <> pPrint (filter (not . null) $ map get_bootstraps bintrees)]]
+    return binlist
 
-    return (binlist, classes)
+-- | Convert a flat list of clusters into a map from individual trees to clusters.
+clustsToMap :: [OneCluster a] -> BinResults a
+clustsToMap clusts =
+  error "finisheme"
 
 --------------------------------------------------------------------------------
 
