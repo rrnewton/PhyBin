@@ -35,11 +35,11 @@ source-repository head
 Executable phybin
   Main-is:           Main.hs
   Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
-                     stringtable-atom, filepath, 
+--                     stringtable-atom, 
+                     filepath, 
                      -- graphviz == 2999.11.0.0,
                      -- graphviz >= 2999.12,
-                     -- More API Changes: [2013.07.19]
-                     graphviz >= 2999.16,
+                     graphviz >= 2999.16, -- More API Changes. [2013.07.19]
                      text >= 0.11 && < 0.12,
                      prettyclass, fgl,
                      HSH, HUnit, bytestring, 

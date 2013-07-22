@@ -7,6 +7,7 @@ module Bio.Phylogeny.PhyBin.Visualize
 import           Text.Printf        (printf)
 import           Data.List          (elemIndex)
 import           Data.Maybe         (fromJust)
+import           Data.Map           ((!))
 import           Data.Text.Lazy     (pack)
 import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
 import qualified Data.Graph.Inductive as G  hiding (run)
@@ -23,22 +24,24 @@ import           Bio.Phylogeny.PhyBin.CoreTypes
 
 -- First we need to be able to convert our trees to FGL graphs:
 toGraph :: AnnotatedTree -> G.Gr String Double
-toGraph tree = G.run_ G.empty $ loop tree
+toGraph (tbl,tree) = G.run_ G.empty $ loop tree
   where
+ fromLabel ix = tbl ! ix
  loop (NTLeaf _ name) = 
     do let str = fromLabel name
        _ <- G.insMapNodeM str
        return str
  loop (NTInterior (StandardDecor{sortedLabels}) ls) =
-    do let bigname = concat$ map fromLabel sortedLabels
+    do let bigname = concatMap fromLabel sortedLabels
        names <- mapM loop ls
        _ <- G.insMapNodeM bigname
        mapM_ (\x -> G.insMapEdgeM (bigname, x, 0.0)) names
        return bigname
 
 -- This version uses the tree nodes themselves as graph labels.
-toGraph2 :: AnnotatedTree -> G.Gr AnnotatedTree Double
-toGraph2 tree = G.run_ G.empty $ loop tree
+-- toGraph2 :: AnnotatedTree -> G.Gr AnnotatedTree Double
+toGraph2 :: AnnotatedTree -> G.Gr (NewickTree StandardDecor) Double       
+toGraph2 (tbl,tree) = G.run_ G.empty $ loop tree
   where
  loop node@(NTLeaf _  _) =  
     do _ <- G.insMapNodeM node 
@@ -58,7 +61,7 @@ toGraph2 tree = G.run_ G.empty $ loop tree
 viewNewickTree :: String -> AnnotatedTree -> IO (Chan (), AnnotatedTree)
 viewNewickTree title tree =
   do chan <- newChan
-     let dot = dotNewickTree title (1.0 / avg_branchlen [tree])
+     let dot = dotNewickTree title (1.0 / avg_branchlen [snd tree])
 	                     tree
 	 runit = do Gv.runGraphvizCanvas default_cmd dot Gv.Xlib
 		    writeChan chan ()
@@ -86,19 +89,21 @@ dotToPDF dot file =
 
 -- | Convert a NewickTree to a graphviz Dot graph representation.
 dotNewickTree :: String -> Double -> AnnotatedTree -> Gv.DotGraph G.Node
-dotNewickTree title edge_scale tree = 
+dotNewickTree title edge_scale atree@(tbl,tree) = 
     --trace ("EDGE SCALE: " ++ show edge_scale) $
     Gv.graphToDot myparams graph
  where 
-  graph = toGraph2 tree
-  myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
+  graph = toGraph2 atree
+  fromLabel ix = tbl ! ix  
+  myparams :: Gv.GraphvizParams G.Node (NewickTree StandardDecor) Double () (NewickTree StandardDecor)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
                                 Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
-  nodeAttrs :: (Int,AnnotatedTree) -> [GA.Attribute]
+  nodeAttrs :: (Int,NewickTree StandardDecor) -> [GA.Attribute]
   nodeAttrs (_num, node) =
     let children = get_children node in 
     [ GA.Label$ GA.StrLabel$ pack$ 
-      concat$ map fromLabel$ sortedLabels$ get_dec node
+      concatMap fromLabel $
+      sortedLabels $ get_dec node
     , GA.Shape (if null children then {-PlainText-} GA.Ellipse else GA.PointShape)
     , GA.Style [GA.SItem GA.Filled []]
     ]
@@ -126,17 +131,18 @@ dotNewickTree title edge_scale tree =
 
 -- | This version shows the ordered/rooted structure of the normalized tree.
 dotNewickTree_debug :: String -> AnnotatedTree -> Gv.DotGraph G.Node
-dotNewickTree_debug title tree = Gv.graphToDot myparams graph
+dotNewickTree_debug title atree@(tbl,tree) = Gv.graphToDot myparams graph
  where 
-  graph = toGraph2 tree
-  myparams :: Gv.GraphvizParams G.Node AnnotatedTree Double () AnnotatedTree
+  graph = toGraph2 atree
+  fromLabel ix = tbl ! ix    
+  myparams :: Gv.GraphvizParams G.Node (NewickTree StandardDecor) Double () (NewickTree StandardDecor)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
 			        Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
-  nodeAttrs :: (Int,AnnotatedTree) -> [GA.Attribute]
+  nodeAttrs :: (Int,(NewickTree StandardDecor)) -> [GA.Attribute]
   nodeAttrs (num,node) =
     let children = get_children node in 
     [ GA.Label (if null children 
-  	        then GA.StrLabel$ pack$ concat$ map fromLabel$ sortedLabels$ get_dec node
+  	        then GA.StrLabel$ pack$ concatMap fromLabel $ sortedLabels $ get_dec node
 	        else GA.RecordLabel$ take (length children) $ 
                                   -- This will leave interior nodes unlabeled:
 	                          map (GA.PortName . GA.PN . pack) $ map show [1..]

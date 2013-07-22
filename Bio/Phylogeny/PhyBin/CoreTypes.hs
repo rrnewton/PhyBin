@@ -114,8 +114,9 @@ type LabelTable = M.Map Label String
 -- BRANCHLENGTH.  The bootstrap values, if present, will range in [0..100]
 type DefDecor = (Maybe Int, BranchLen)
 
--- | A common type of tree is "AnnotatedTree", which contains the standard decorator.
-type AnnotatedTree = NewickTree StandardDecor
+-- | A common type of tree is "AnnotatedTree", which contains the standard decorator
+-- and also a table for restoring the human-readable node names.
+type AnnotatedTree = (LabelTable, NewickTree StandardDecor)
 
 -- | The standard decoration includes everything in `DefDecor` plus
 --   some extra cached data:
