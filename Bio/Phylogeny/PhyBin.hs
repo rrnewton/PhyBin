@@ -14,8 +14,8 @@ module Bio.Phylogeny.PhyBin
 
 import qualified Data.Foldable as F
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort, mapAccumL)
-import           Data.Maybe          (fromMaybe, catMaybes)
+import           Data.List           (delete, minimumBy, sortBy)
+import           Data.Maybe          (fromMaybe)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
@@ -40,6 +40,7 @@ import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 import           Bio.Phylogeny.PhyBin.RFDistance
 import           Bio.Phylogeny.PhyBin.Binning
+import           Bio.Phylogeny.PhyBin.Util
 
 -- Turn on for extra invariant checking:
 debug :: Bool
