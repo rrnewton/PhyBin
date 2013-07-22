@@ -8,17 +8,20 @@ module Bio.Phylogeny.PhyBin.Parser
 import           Control.Exception  (evaluate, handle, SomeException)
 import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Char          (isSpace)
+import           Data.Map as M
 import           Text.Parsec
 import           Text.Parsec.ByteString.Lazy
 import           Test.HUnit          ((~:),(~=?),Test,test,assertFailure)
-import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, toLabel, treeSize)
+import           Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, treeSize, LabelTable)
+import           Prelude as P
 
 
 -- | Parse a bytestring into a NewickTree with branch lengths.  The
 --   first argument is file from which the data came and is just for
 --   better error messages.
-parseNewick :: String -> B.ByteString -> NewickTree DefDecor
-parseNewick file input = 
+parseNewick :: String -> B.ByteString -> (LabelTable, NewickTree DefDecor)
+parseNewick file input =
+  extractLabelTable $ 
   runB file newick_parser $
   B.filter (not . isSpace) input
 
@@ -27,18 +30,35 @@ runB file p input = case (parse p "" input) of
 	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
 		 Right x  -> x
 
+
+extractLabelTable :: TempTree -> (LabelTable, NewickTree DefDecor)
+extractLabelTable tr = loop M.empty tr
+ where
+   loop acc (NTLeaf (d,Just nm) _) =
+     let nxt = M.size acc in
+     (M.insert nxt nm acc,  NTLeaf d nxt)
+   loop acc1 (NTInterior (d,Nothing) chlds) =
+     let (acc',ls') = 
+          P.foldr (\ x (acc2,ls) ->
+                   let (acc3,x') = loop acc2 x in
+                   (acc3, x':ls))
+                 (acc1,[]) chlds
+     in (acc', NTInterior d ls')
 ----------------------------------------------------------------------------------------------------
 -- Newick file format parser definitions:
 ----------------------------------------------------------------------------------------------------
 
-tag :: a -> NewickTree a -> NewickTree a
+-- | Hack: we store the names in the leaves.
+type TempTree = NewickTree (DefDecor,Maybe String)
+
+tag :: DefDecor -> TempTree -> TempTree
 tag l s =
   case s of 
-    NTLeaf _ n      -> NTLeaf l n
-    NTInterior _ ls -> NTInterior l ls
+    NTLeaf (_,m) n            -> NTLeaf (l,m) n
+    NTInterior (_,Nothing) ls -> NTInterior (l,Nothing) ls
 
 -- | This parser ASSUMES that whitespace has been prefiltered from the input.
-newick_parser :: Parser (NewickTree DefDecor)
+newick_parser :: Parser TempTree
 newick_parser = 
    do x <- subtree
       -- Get the top-level metadata:
@@ -46,34 +66,34 @@ newick_parser =
       _ <- char ';'
       return$ tag l x
 
-subtree :: Parser (NewickTree DefDecor)
+subtree :: Parser TempTree
 subtree = internal <|> leaf
 
 defaultMeta :: (Maybe Int, Double)
 defaultMeta = (Nothing,0.0)
 
-leaf :: Parser (NewickTree DefDecor)
-leaf = do n<-name; return$ NTLeaf defaultMeta (toLabel n)
+leaf :: Parser TempTree
+leaf = do nm<-name; return$ NTLeaf (defaultMeta,Just nm) 0 
 
-internal :: Parser (NewickTree DefDecor)
+internal :: Parser TempTree
 internal = do _   <- char '('       
 	      bs  <- branchset
 	      _   <- char ')'       
               _nm <- name -- IGNORED, internal names.
-              return$ NTInterior defaultMeta bs
+              return$ NTInterior (defaultMeta,Nothing) bs
 
-branchset :: Parser [NewickTree DefDecor]
+branchset :: Parser [TempTree]
 branchset =
     do b <- branch <?> "at least one branch"
        rest <- option [] $ try$ do char ','; branchset
        return (b:rest)
 
-branch :: Parser (NewickTree DefDecor)
+branch :: Parser TempTree
 branch = do s<-subtree; l<-branchMetadat; 
 	    return$ tag l s
 
 -- If the length is omitted, it is implicitly zero.
-branchMetadat :: Parser DefDecor    
+branchMetadat :: Parser DefDecor 
 branchMetadat = option defaultMeta $ do
     char ':'
     n <- (try sciNotation <|> number)
@@ -111,13 +131,12 @@ name = option "" $ many1 (noneOf "()[]:;, \t\n\r\f\v")
 -- name = option "" $ many1 (letter <|> digit <|> oneOf "_.-")
 
 
-
 --------------------------------------------------------------------------------
 -- Unit Tests
 --------------------------------------------------------------------------------
 
 tre1 :: NewickTree DefDecor
-tre1 = parseNewick "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+tre1 = snd $ parseNewick "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
 unitTests :: Test
 unitTests = test
@@ -132,9 +151,9 @@ unitTests = test
      -- These are not allowed:
    , "null branchset" ~: errortest$ run branchset ""
      
-   , "internal" ~: NTInterior (Nothing,0.0) [ntl "A"] ~=?  run internal "(A);"
-   , "example: no nodes are named"  ~: NTInterior (Nothing,0)
-                                         [ntl "", ntl "", NTInterior (Nothing,0) [ntl "", ntl ""]]
+   , "internal" ~: NTInterior nada [ntl "A"] ~=?  run internal "(A);"
+   , "example: no nodes are named"  ~: NTInterior nada
+                                         [ntl "", ntl "", NTInterior nada [ntl "", ntl ""]]
         			   ~=? run newick_parser "(,,(,));"
    , "example: leaf nodes are named" ~: 6 ~=?  treeSize (run newick_parser "(A,B,(C,D));")
    , "example: all nodes are named"  ~: 6 ~=?  treeSize (run newick_parser "(A,B,(C,D)E)F;")
@@ -146,8 +165,8 @@ unitTests = test
    , "example: a tree rooted on a leaf node (rare)"        ~: 6 ~=? treeSize (run newick_parser "((B:0.2,(C:0.3,D:0.4)E:0.5)F:0.1)A;")
    ]
  where
-  ntl s = NTLeaf (Nothing,0.0) (toLabel s)
-
+  ntl s = NTLeaf ((Nothing,0.0),Just s) 0
+  nada = ((Nothing,0),Nothing)
 
 run :: Show a => Parser a -> String -> a
 run p input = runB "<unknown>" p (B.pack input)

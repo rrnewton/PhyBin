@@ -23,10 +23,11 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          PhyBinConfig(..), default_phybin_config,
 
          -- * General helpers
-         toLabel, fromLabel, Label,
+         Label, LabelTable
        )
        where
 
+import qualified Data.Map as M
 import Data.Foldable (Foldable(..))
 import Data.Maybe (maybeToList)
 import Data.Monoid (mappend, mconcat)
@@ -75,20 +76,20 @@ instance Foldable NewickTree where
 instance Pretty dec => Pretty (NewickTree dec) where 
  -- I'm using displayDefaultTree for the "prettiest" printing and
  -- replacing pPrint with a whitespace-improved version of show:
- pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (fromLabel name)
+ pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (show name)
  pPrint (NTInterior dec ls) = "NTInterior" <+> pPrint dec <+> pPrint ls
 
 
 -- | Display a tree WITH the bootstrap and branch lengths.
-displayDefaultTree :: NewickTree DefDecor -> Doc
-displayDefaultTree (NTLeaf (Nothing,_) name)   = text (fromLabel name)
-displayDefaultTree (NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
-displayDefaultTree (NTInterior (bootstrap,_) ls) = 
+displayDefaultTree :: LabelTable -> NewickTree DefDecor -> Doc
+displayDefaultTree mp (NTLeaf (Nothing,_) name)   = text (mp M.! name)
+displayDefaultTree mp (NTLeaf _ _ ) = error "WEIRD -- why did a leaf node have a bootstrap value?"
+displayDefaultTree mp (NTInterior (bootstrap,_) ls) = 
    case bootstrap of
      Nothing -> base
      Just val -> base <> text ":[" <> text (show val) <> text "]"
  where
-   base = parens$ sep$ map_but_last (<>text",") $ map displayDefaultTree ls
+   base = parens$ sep$ map_but_last (<>text",") $ map (displayDefaultTree mp) ls
 
 
 ----------------------------------------------------------------------------------------------------
@@ -99,14 +100,10 @@ displayDefaultTree (NTInterior (bootstrap,_) ls) =
 -- Experimental: toggle this to change the representation of labels:
 -- Alas I always have problems with the interned string libs (e.g. segfaults)... [2012.11.20]
 ----------------------------------------
-#ifdef NO_ATOMS
-type Label = String; (toLabel, fromLabel) = (id, id)
-#else
-type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
-#endif
-----------------------------------------
-fromLabel :: Label -> String
-toLabel   :: String -> Label
+type Label = Int
+
+-- | Map labels back onto meaningful names.
+type LabelTable = M.Map Label String
 
 ----------------------------------------------------------------------------------------------------
 -- Tree metadata (decorators)
