@@ -32,6 +32,11 @@ import Data.Maybe (maybeToList)
 import Data.Monoid (mappend, mconcat)
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
+#define NO_ATOMS
+#ifndef NO_ATOMS
+import StringTable.Atom
+#endif
+
 ----------------------------------------------------------------------------------------------------
 -- Type definitions
 ----------------------------------------------------------------------------------------------------
@@ -94,10 +99,10 @@ displayDefaultTree (NTInterior (bootstrap,_) ls) =
 -- Experimental: toggle this to change the representation of labels:
 -- Alas I always have problems with the interned string libs (e.g. segfaults)... [2012.11.20]
 ----------------------------------------
-#if 0
-type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
-#else
+#ifdef NO_ATOMS
 type Label = String; (toLabel, fromLabel) = (id, id)
+#else
+type Label = Atom; (toLabel, fromLabel) = (toAtom, fromAtom)
 #endif
 ----------------------------------------
 fromLabel :: Label -> String

@@ -31,14 +31,9 @@ build-type: Simple
 source-repository head
   type:     git
   location: git://github.com/rrnewton/PhyBin.git
---  location: https://github.com/rrnewton/PhyBin
---
-  -- type:     darcs
-  -- location: http://code.haskell.org/phybin/repo/
 
 Executable phybin
   Main-is:           Main.hs
---  Main-is:           Bio/Phylogeny/PhyBin/Main.hs  
   Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
                      stringtable-atom, filepath, 
                      -- graphviz == 2999.11.0.0,
@@ -49,7 +44,9 @@ Executable phybin
                      prettyclass, fgl,
                      HSH, HUnit, bytestring, 
                      -- For bytestring.lazy support:
-                     parsec >= 3.1.0 
+                     parsec >= 3.1.0, 
+                     lattice-par, bitvec >= 0.1, vector >= 0.10
+
 --  extensions: CPP
 --   extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances
   GHC-Options: -O2 
