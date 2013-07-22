@@ -27,7 +27,9 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        )
        where
 
+import Data.Foldable (Foldable(..))
 import Data.Maybe (maybeToList)
+import Data.Monoid (mappend, mconcat)
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 ----------------------------------------------------------------------------------------------------
@@ -59,6 +61,11 @@ instance NFData a => NFData (NewickTree a) where
 instance Functor NewickTree where 
    fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
    fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
+
+instance Foldable NewickTree where
+  foldMap f (NTLeaf dec x) = f dec
+  foldMap f (NTInterior dec ls) = mappend (f dec) $
+                                  mconcat (map (foldMap f) ls)
 
 instance Pretty dec => Pretty (NewickTree dec) where 
  -- I'm using displayDefaultTree for the "prettiest" printing and
@@ -242,7 +249,7 @@ foldIsomorphicTrees _ [] = error "foldIsomorphicTrees: empty list of input trees
 foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
  where
    -- Preserve the input order:
-   horiztrees = foldr consTrees (fmap (const []) hd) ls
+   horiztrees = Prelude.foldr consTrees (fmap (const []) hd) ls
    -- We use the tree datatype itself as the intermediate data
    -- structure.  This is VERY allocation-expensive, it would be
    -- possible to trade compute for allocation here:

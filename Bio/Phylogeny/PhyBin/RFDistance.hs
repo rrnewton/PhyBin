@@ -21,22 +21,31 @@ import           Data.LVar.NatArray as NA
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Data.BitList
 import qualified Data.Set as S
+import qualified Data.Foldable as F
+import           Data.Monoid
 
 --------------------------------------------------------------------------------
 
--- type BiPartTable = IMap BitList (U.Vector Bool)
--- type BiPartTable s = IMap BitList s (NA.NatArray s Word8)
-type BiPartTable s = IMap DenseLabelSet s (SparseLabelSet s)
+-- | Tree's are identified simply by their order within the list of input trees.
+type TreeID = Int
 
+-- | A collection of all observed bipartitons (bips) with a mapping of which trees
+-- contain which Bips.
+type BipTable s = IMap DenseLabelSet s (SparseLabelSet s)
+-- type BipTable = IMap BitList (U.Vector Bool)
+-- type BipTable s = IMap BitList s (NA.NatArray s Word8)
+
+-- | Sets of taxa (BiPs) that are expected to be sparse.
 type SparseLabelSet s = IS.ISet s Label
 -- NA.NatArray s Word8
 
 --------------------------------------------------------------------------------
 
--- We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N).
+-- | Dense sets of taxa, aka Bipartitions or BiPs
+--   We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N). 
+type DenseLabelSet = S.Set Label
 -- type DenseLabelSet s = BitList
 -- type DenseLabelSet = UB.Vector B.Bit
-type DenseLabelSet = S.Set Label
 
 -- M.write vec lab (B.fromBool True)
 -- mkEmptyDense size = U.replicate size (B.fromBool False)    
@@ -44,14 +53,15 @@ type DenseLabelSet = S.Set Label
 -- markLabel lab set = IS.putInSet lab set 
 -- mkEmptyDense _size = IS.newEmptySet
 
-markLabel :: Label -> DenseLabelSet -> DenseLabelSet
-markLabel lab set  = S.insert lab set 
-
+markLabel    :: Label -> DenseLabelSet -> DenseLabelSet
 mkEmptyDense :: Int -> DenseLabelSet
-mkEmptyDense _size = S.empty
+denseUnions  :: Int -> [DenseLabelSet] -> DenseLabelSet
+bipSize      :: DenseLabelSet -> Int
 
-denseUnions :: Int -> [DenseLabelSet] -> DenseLabelSet
+markLabel lab set  = S.insert lab set 
+mkEmptyDense _size = S.empty
 denseUnions _size  = S.unions 
+bipSize            = S.size
 
 --------------------------------------------------------------------------------
 
@@ -63,7 +73,7 @@ denseUnions _size  = S.unions
 distanceMatrix :: [AnnotatedTree] -> IO (U.Vector Word)
 distanceMatrix lst = runParIO$ do   
 
-  table::BiPartTable s <- IM.newEmptyMap 
+  table :: BipTable s <- IM.newEmptyMap 
   forM_ lst $ \ tree -> do
     insertBips table tree
   
@@ -73,39 +83,31 @@ distanceMatrix lst = runParIO$ do
   -- followed by ... fill matrix from bip table
 
 
-insertBips :: BiPartTable s -> AnnotatedTree -> Par d s ()
+insertBips :: BipTable s -> AnnotatedTree -> Par d s ()
 insertBips table tree = loop
   where
   loop = undefined
 
-
--- labelBips :: AnnotatedTree -> NewickTree (StandardDecor, BitList)
--- labelBips :: AnnotatedTree -> NewickTree (StandardDecor, U.Vector Bool)
-labelBips :: AnnotatedTree -> NewickTree (StandardDecor, DenseLabelSet)
+-- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
+-- each interior node carries a list of BiPs the same length as its list of children.
+labelBips :: NewickTree a -> NewickTree (a, [DenseLabelSet])
 labelBips tr = loop tr
   where
     size = treeSize tr    
     zero = mkEmptyDense size
-    loop (NTLeaf dec lab) =
-      let bitvec = markLabel lab zero in
-      NTLeaf (dec,bitvec) lab
-      
+    loop (NTLeaf dec lab) = NTLeaf (dec, [markLabel lab zero]) lab      
     loop (NTInterior dec chlds) =
       let chlds' = map loop chlds
-          sets   = map (snd . get_dec) chlds' in
-      NTInterior (dec, denseUnions size sets) chlds'      
+          sets   = map (denseUnions size . snd . get_dec) chlds' in
+      NTInterior (dec, sets) chlds'
 
-    -- loop2 acc [] = []
-    -- loop2 acc (hd:tl) = UB.difference (get_dec hd) acc
-    
-
-#if 0
-    zero :: U.Vector Bool
-    zero = U.replicate size False
-    loop (NTLeaf dec lab) =
-      let bitvec = U.modify (\v -> M.write v (read lab) True) zero in
-      NTLeaf (dec,bitvec) lab
-#endif
+foldBips :: Monoid m => (DenseLabelSet -> m) -> NewickTree a -> m
+foldBips f tr = F.foldMap f' (labelBips tr)
+ where
+   f' (_,bips) = F.foldMap f bips
+  
+-- | Get all non-singleton BiPs implied by a tree.
+allBips tr = S.filter ((> 1) . bipSize) $ foldBips S.insert tr S.empty
 
 
 instance Pretty a => Pretty (S.Set a) where
