@@ -19,10 +19,14 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 homepage: http://people.csail.mit.edu/newton/phybin/
 
 Copyright: Copyright (c) 2010 Ryan Newton
-Synopsis: Utility for binning phylogenetic trees in Newick format.
+Synopsis: Utility for clustering phylogenetic trees in Newick format based on Robinson-Foulds distance.
 Description: 
-   Classifies (bins) input Newick trees by topology, creating output files that 
-   characterize the size and contents of each bin (including
+   This package provides a libary and executable for dealing with Newick tree files.
+   .
+   It can do simple binning of identical trees or more complex clustering based on 
+   an all-to-all Robinson-Foulds distance matrix.
+   .
+   Output files that characterize the size and contents of each bin or cluster (including
    generating GraphViz-based visual representations of the tree topologies).
 
 Category: Bioinformatics
