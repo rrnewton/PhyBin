@@ -26,7 +26,7 @@ Description:
    It can do simple binning of identical trees or more complex clustering based on 
    an all-to-all Robinson-Foulds distance matrix.
    .
-   Output files that characterize the size and contents of each bin or cluster (including
+   phybin produces output files that characterize the size and contents of each bin or cluster (including
    generating GraphViz-based visual representations of the tree topologies).
 
 Category: Bioinformatics
