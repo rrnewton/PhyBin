@@ -286,7 +286,26 @@ flattenDendro dendro =
 --------------------------------------------------------------------------------
 
 outputClusters binlist output_dir do_graph = do
-    
+    let numbins = length binlist
+    let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
+
+    forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, OneCluster ftrees)) -> do
+       writeFile (base i size ++".txt") (concat$ map ((++"\n") . treename) ftrees)
+       -- TODO: CONSENSUS TREE:
+       -- writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullAvgTr) ++ ";\n") -- FIXME
+
+    putStrLn$ "[finished] Wrote contents of each bin to bin<N>_<binsize>.txt"
+    putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
+    when (do_graph) $ do
+      putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
+      forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, OneCluster membs)) -> do
+    	 when (size > 1 || numbins < 100) $ do
+           -- TODO CONSENSUS TREE
+--           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs)) fullAvgTr
+--	   _ <- dotToPDF dot (base i size ++ ".pdf")
+	   return ()
+      putStrLn$ "[finished] Wrote visual representations of trees to "++filePrefix++"<N>_<binsize>.pdf"
+
     return ()
 
 
@@ -306,8 +325,8 @@ outputBins binlist output_dir  do_graph = do
          writeFile (base i size ++".dbg") (show (pPrint avgTree) ++ "\n")
        writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullAvgTr) ++ ";\n") -- FIXME
 
-    putStrLn$ "[finished] Wrote contents of each bin to bin<N>_<binsize>.txt"
-    putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
+    putStrLn$ "[finished] Wrote contents of each bin to "++filePrefix++"<N>_<binsize>.txt"
+    putStrLn$ "           Wrote representative trees to "++filePrefix++"<N>_<binsize>.tr" 
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
       forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, OneCluster membs), avgTree) -> do
