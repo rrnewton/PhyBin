@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.2
+Version:        0.2.1
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -13,6 +13,7 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 -- 0.1.2.4 -- new release, several new features
 -- 0.1.2.5 -- bump for graphviz API changes
 -- 0.2 -- Add Robinson-Foulds distance, use Int labels.
+-- 0.2.1 -- misc changes and expose library
 
 -- homepage: http://code.haskell.org/phybin
 homepage: http://people.csail.mit.edu/newton/phybin/
@@ -25,23 +26,28 @@ Description:
    generating GraphViz-based visual representations of the tree topologies).
 
 Category: Bioinformatics
-Cabal-Version: >=1.6
+Cabal-Version: >=1.8
 
-build-type: Simple
+Extra-source-files: README.md
 
-source-repository head
+Build-type: Simple
+
+Source-repository head
   type:     git
   location: git://github.com/rrnewton/PhyBin.git
 
-Executable phybin
-  Main-is:           Main.hs
+Library
+  Exposed-modules:   Bio.Phylogeny.PhyBin
+                     Bio.Phylogeny.PhyBin.RFDistance
+                     Bio.Phylogeny.PhyBin.Parser
+                     Bio.Phylogeny.PhyBin.CoreTypes
+                     Bio.Phylogeny.PhyBin.Binning
+                     Bio.Phylogeny.PhyBin.Util
+                     Bio.Phylogeny.PhyBin.Visualize
+--  Other-modules:     Data.BitList
   Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
                      async, time,
-                     -- stringtable-atom, 
                      filepath, 
-                     -- graphviz == 2999.11.0.0,
-                     -- graphviz >= 2999.12,
-                     -- More API Changes. [2013.07.19]:
                      graphviz >= 2999.16, 
                      text >= 0.11 && < 0.12,
                      prettyclass, fgl,
@@ -50,16 +56,21 @@ Executable phybin
                      parsec >= 3.1.0, 
                      lattice-par, bitvec >= 0.1, vector >= 0.10,
                      hierarchical-clustering >= 0.4
-
---  extensions: CPP
---   extensions: ScopedTypeVariables, RecordWildCards, TypeSynonymInstances
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
---  GHC-Options: -O2 -threaded 
 
--- Doesn't work for an executable?
---  extra-source-files: README.txt
-
--- Oh, well this doesn't seem right but it achieves the effect for now:
---  c-sources: README.txt
---  includes: README.txt
-
+Executable phybin
+  Main-is:           Main.hs
+  Build-Depends:     phybin
+  -- DUPLICATE:
+  Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
+                     async, time,
+                     filepath, 
+                     graphviz >= 2999.16, 
+                     text >= 0.11 && < 0.12,
+                     prettyclass, fgl,
+                     HSH, HUnit, bytestring, 
+                     -- For bytestring.lazy support:
+                     parsec >= 3.1.0, 
+                     lattice-par, bitvec >= 0.1, vector >= 0.10,
+                     hierarchical-clustering >= 0.4
+  GHC-Options: -O2 -funbox-strict-fields -rtsopts

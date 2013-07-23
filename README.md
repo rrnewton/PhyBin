@@ -59,53 +59,7 @@ Command-line Options
 ====================
 
 In addition to input files and directories, `phybin` supports a number
-of command-line options.
-
-As of PhyBin Version 0.1, the `-n` option is mandatory to specify how
-many taxa (leaves) are expected in the trees, and input trees with the
-wrong number of taxa are ignored.  
-
-`-v` or `--verbose`
-:     print WARNINGS and other information (recommended at first)
-
-`-V` or `--version`
-:     show version number
-
-`-o DIR` or `--output=DIR`
-:     set directory to contain all output files (default "./")
-                             
-#### Visualization
-
- `-g` or `--graphbins` 
-:     use graphviz to produce .dot and .pdf output files named bin1_N.*, bin2_M.*, etc
-
-
- `-d` or `--drawbins`
-:     like -g, but open GUI windows to show a tree for each bin
-
-`-w` or `--view`
-:     for convenience, "view mode" simply displays input Newick files without binning
-                             
-#### Handling taxa names 
-
-`-n NUM` or `--numtaxa=NUM`
-:    expect NUM taxa for this dataset
-                             
-`-p NUM` or `--nameprefix=NUM`
-:    Leaf names in the input Newick trees are usually gene names, not taxa.
-     It is typical to extract taxa names from genes.  This option extracts a
-     prefix of NUM characters to serve as the taxa name.
-                             
-`-s STR` or `--namesep=STR`
-:    An alternative to --nameprefix, STR provides a set of delimeter characters,
-     for example '-' or '0123456789'.  The taxa name is then a variable-length
-     prefix of each gene name up to but not including any character in STR.
-                             
-`-m FILE` or `--namemap=FILE`
-:    Even once prefixes are extracted it may be necessary to use a lookup table
-     to compute taxa names, e.g. if multiple genes/plasmids map onto one taxa.
-     This option specifies a text file with find/replace entries of the form
-     "<string> <taxaname>", which are applied AFTER -s and -p.
+of command-line options.  Run "phybin --help" to see these options.
 
 - - - - - - - - - - - - - - -
 Authors: Irene and Ryan Newton
@@ -113,7 +67,5 @@ Authors: Irene and Ryan Newton
 Contact email: `irnewton` `indiana` `edu` (with "at" and "dot" inserted).
 
 .
-
-
 
 

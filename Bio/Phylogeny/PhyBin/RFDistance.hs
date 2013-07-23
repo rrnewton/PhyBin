@@ -13,12 +13,12 @@ import qualified Data.Bit                    as B
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 
-import           Control.LVish
-import qualified Data.LVar.Set   as IS
-import qualified Data.LVar.SLSet as SL
+-- import           Control.LVish
+-- import qualified Data.LVar.Set   as IS
+-- import qualified Data.LVar.SLSet as SL
 
-import           Data.LVar.Map   as IM
-import           Data.LVar.NatArray as NA
+-- import           Data.LVar.Map   as IM
+-- import           Data.LVar.NatArray as NA
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
 -- import           Data.BitList
@@ -98,6 +98,7 @@ allBips tr = S.filter ((> 1) . bipSize) $ foldBips S.insert tr S.empty
 --------------------------------------------------------------------------------
 -- First, necessary types:
 
+#if 0
 -- | A collection of all observed bipartitons (bips) with a mapping of which trees
 -- contain which Bips.
 type BipTable s = IMap DenseLabelSet s (SparseTreeSet s)
@@ -112,7 +113,7 @@ type SparseTreeSet s = IS.ISet s TreeID
 type TreeID = AnnotatedTree
 -- | Tree's are identified simply by their order within the list of input trees.
 -- type TreeID = Int
-
+#endif
 --------------------------------------------------------------------------------
 
 -- The distance matrix is an atomically-bumped matrix of numbers.
