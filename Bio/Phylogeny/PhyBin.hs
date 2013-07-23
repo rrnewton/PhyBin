@@ -140,7 +140,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     classes <- case clust_mode of
       BinThem         -> doBins validtrees 
       ClusterThem lnk -> do
-        (mat, dendro) <- doCluster lnk validtrees
+        (mat, dendro) <- doCluster lnk validtrees        
         case print_rfmatrix of
           False -> return ()
           True -> do -- treeFiles <- acquireTreeFiles files
@@ -155,6 +155,11 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
                      -- putStrLn$ "Taxa: "++show (pPrint lbls)
                      -- putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
                      printDistMat mat
+        writeFile (combine output_dir ("dendrogram.txt"))
+                  (show$ fmap treename dendro)
+        putStrLn "Wrote full dendrogram to file dendrogram.txt"
+--           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs)) fullAvgTr
+--	   _ <- dotToPDF dot (base i size ++ ".pdf")
         
         case dist_thresh of
           Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
