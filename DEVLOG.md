@@ -81,13 +81,19 @@ I singled out 116 and 233, and then printed their normalized forms
 using "phybin -p 2 --printnorms tests/t2/*":
 
     Tree "116"
+    ((1_, 2_), (7_, (18, 6_)), ((14, 3_), (19, (13, 5_))))
+    Tree "233"
+    ((1_, 2_), (7_, (18, 6_)), ((14, 3_), (19, (13, 5_))))
+
+And UNNORMALIZED:
+
+    Tree "116"
     (3_, ((((6_, 18), 7_), (2_, 1_)), (19, (13, 5_))), 14)
     Tree "233"
     (5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13)
 
-Huh!  These show that they ARE in fact different...  It looks like
-traditional phybin was somehow incorrectly grouping them.
+Wait.... this makes it look like normalization is WRONG!!!
+Tree 233 starts with 13+5 in a three-way split with a big chunk
+containing everything else.
 
-But the weird thing is that phybin uses equality on the normalized
-form to define equivalence!  And those normal forms are not the
-same...  
+In fact, the RFDistance is three, which is probably right.

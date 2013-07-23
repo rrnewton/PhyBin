@@ -1,6 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables, CPP #-}
 
 module Bio.Phylogeny.PhyBin.RFDistance
+       (DenseLabelSet, DistanceMatrix, 
+        allBips, foldBips,
+        distanceMatrix, printDistMat)
        where
 
 import           Control.Monad
@@ -160,8 +163,10 @@ instance Pretty a => Pretty (S.Set a) where
 printDistMat :: Handle -> V.Vector (U.Vector Int) -> IO () 
 printDistMat h mat = do
   hPutStrLn h "Robinson-Foulds distance (matrix format):"
+  hPutStrLn h "-----------------------------------------"
   V.forM_ mat $ \row -> do 
     U.forM_ row $ \elem -> do
       hPutStr h (show elem)
       hPutStr h " "
-    hPutStr h "\n"          
+    hPutStr h "0\n"          
+  hPutStrLn h "-----------------------------------------"

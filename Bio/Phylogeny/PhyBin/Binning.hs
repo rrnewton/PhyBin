@@ -425,7 +425,8 @@ unitTests =
              --  ("three", snd$parseNewick M.empty id "" "(D,E,C,(B,A));")]
             )
       
-   , "dotConversion" ~: True ~=? 100 < length (show $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444
+   , "dotConversion" ~: True ~=? 100 < length (show $ dotNewickTree "" 1.0$ norm "(D,E,C,(B,A));") -- 444     
    ]
+
 
 --------------------------------------------------------------------------------

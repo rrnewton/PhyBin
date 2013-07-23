@@ -57,7 +57,7 @@ type BranchLen = Double
 --   single, canonical rooted representation is chosen.
 data NewickTree a = 
    NTLeaf     a {-# UNPACK #-} !Label
- | NTInterior a [NewickTree a]
+ | NTInterior a  [NewickTree a]
  deriving (Show, Eq, Ord)
 
 -- TODO: Ordering maybe shouldn't need to touch the metadata.  At least on the fast
@@ -103,7 +103,7 @@ instance (Pretty k, Pretty v) => Pretty (M.Map k v) where
 
 -- | Display a tree WITH the bootstrap and branch lengths.
 displayDefaultTree :: FullTree DefDecor -> Doc
-displayDefaultTree orig = loop tr
+displayDefaultTree orig = loop tr <> ";"
   where
     (FullTree _ mp tr) = orig -- normalize orig
     loop (NTLeaf (Nothing,_) name)     = text (mp M.! name)

@@ -6,13 +6,14 @@ import           Data.List (sort)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
+import qualified Data.IntSet as IS
 import           Control.Monad
 import           Control.Concurrent    (Chan, readChan, ThreadId, forkIO)
 import           System.Environment    (getArgs, withArgs)
 import           System.Console.GetOpt (OptDescr(Option), ArgDescr(..), ArgOrder(..), usageInfo, getOpt)
 import           System.Exit           (exitSuccess)
 import           System.IO             (stdout) 
-import           Test.HUnit            (runTestTT, Test, test)
+import           Test.HUnit            (runTestTT, Test, test, (~:))
 
 import Control.Applicative ((<$>))
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
@@ -23,7 +24,7 @@ import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabL
                                        unitTests, acquireTreeFiles, deAnnotate)
 import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
-import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat)
+import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat, allBips)
 import Bio.Phylogeny.PhyBin.PreProcessor
 
 import qualified Data.Clustering.Hierarchical as C
@@ -178,14 +179,47 @@ usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
 defaultErr :: [String] -> t
 defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
+--------------------------------------------------------------------------------
+-- Aggregated Unit Tests
+--------------------------------------------------------------------------------
 
 allUnitTests :: Test
 -- allUnitTests = unitTests ++
 allUnitTests = test 
   [ Bio.Phylogeny.PhyBin.unitTests
   , Bio.Phylogeny.PhyBin.Parser.unitTests
+  , "norm/Bip1" ~: (testNorm prob1)
   ]
 --  Bio.Phylogeny.PhyBin.Parser.unitTests
+
+--    "(5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13)"
+-- [2013.07.23]      
+-- This was INCORRECTLY normalizing to:
+--     ((1_, 2_), (7_, (18, 6_)), ((14, 3_), (19, (13, 5_))))
+prob1 = "(5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13);"
+
+-- | Make sure that the normalized version of a tree yields the same bipartitions as
+-- the unnormalized one.
+testNorm :: String -> IO ()
+testNorm str = do
+  let (labs,parsed) = parseNewick M.empty id "test" (B.pack str)
+      normed = normalize $ annotateWLabLists parsed
+      bips1  = allBips parsed
+      bips2  = allBips normed
+      added   = S.difference bips2 bips1
+      removed = S.difference bips1 bips2
+      dispBips bip = show$
+        map (map (labs M.!)) $ 
+        map IS.toList$ S.toList bip
+  unless (bips1 == bips2) $ do
+    putStrLn$ "Normalized this: "++show (displayDefaultTree $ FullTree "" labs parsed)
+    putStrLn$ "To this        : "++show (displayDefaultTree $ deAnnotate $ FullTree "" labs normed)
+    error$ "Normalization added and removed these bipartitions, respectively:\n  "
+           ++dispBips added ++"\n  "
+           ++dispBips removed
+
+
+--------------------------------------------------------------------------------
 
 main :: IO ()
 main = 
@@ -255,8 +289,9 @@ main =
        (_,fts) <- parseNewickFiles (name_hack config) all_inputs
        forM_ fts $ \ ft@(FullTree name _ _) -> do
          putStrLn $ "Tree "++show name
-         putStrLn$ show$ displayDefaultTree ft
-         exitSuccess
+         putStrLn$ show$ displayDefaultTree$ deAnnotate $
+           liftFT (normalize . annotateWLabLists) ft
+       exitSuccess
      ------------------------------------------------------------
      when (View `elem` opts) $ do 
        view_graphs config
