@@ -16,7 +16,8 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 -- 0.2.2 -- misc changes and expose library
 
 -- homepage: http://code.haskell.org/phybin
-homepage: http://people.csail.mit.edu/newton/phybin/
+-- homepage: http://people.csail.mit.edu/newton/phybin/
+homepage: http://www.cs.indiana.edu/~rrnewton/projects/phybin/
 
 Copyright: Copyright (c) 2010 Ryan Newton
 Synopsis: Utility for clustering phylogenetic trees in Newick format based on Robinson-Foulds distance.
