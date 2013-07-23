@@ -31,13 +31,24 @@ import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
 import           Data.Monoid
 import           Prelude as P
+import           Debug.Trace
 
 --------------------------------------------------------------------------------
 -- A data structure choice
 --------------------------------------------------------------------------------
 
 -- | Dense sets of taxa, aka Bipartitions or BiPs
---   We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N). 
+--   We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N).
+-- 
+--   NORMALIZATION Rule: Bipartitions are really two disjoint sets.  But as long as
+--   the parent set (the union of the partitions, aka "all taxa") then a bipartition
+--   can be represented just by *one* subset.  Yet we must choose WHICH subset for
+--   consistency.  We use the rule that we always choose the SMALLER.  Thus the
+--   DenseLabelSet should always be half the size or less, compared to the total
+--   number of taxa.
+-- 
+--   A set that is more than a majority of the taxa can be normalized by "flipping",
+--   i.e. taking the taxa that are NOT in that set.
 type DenseLabelSet = SI.IntSet 
 -- type DenseLabelSet s = BitList
 -- type DenseLabelSet = UB.Vector B.Bit
@@ -78,15 +89,30 @@ distanceMatrix lst =
 -- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
 -- each interior node carries a list of BiPs the same length as its list of children.
 labelBips :: NewickTree a -> NewickTree (a, [DenseLabelSet])
-labelBips tr = loop tr
-  where
-    size = treeSize tr    
+labelBips tr =
+    trace ("labelbips "++show allLeaves++" "++show size) $
+    loop tr
+  where    
+    size = numLeaves tr
     zero = mkEmptyDense size
     loop (NTLeaf dec lab) = NTLeaf (dec, [markLabel lab zero]) lab      
     loop (NTInterior dec chlds) =
       let chlds' = map loop chlds
-          sets   = map (denseUnions size . snd . get_dec) chlds' in
+          sets   = map (normBip . denseUnions size . snd . get_dec) chlds' in
       NTInterior (dec, sets) chlds'
+
+    halfSize = size `quot` 2
+    normBip bip =
+      let flipped = SI.difference allLeaves bip in
+      case compare (SI.size bip) halfSize of
+        LT -> bip 
+        GT -> flipped -- Flip it
+        EQ -> -- This is a painful case, we need a tie-breaker
+              min bip flipped
+           
+    allLeaves = leafSet tr
+    leafSet (NTLeaf _ lab)    = SI.singleton lab
+    leafSet (NTInterior _ ls) = denseUnions size $ map leafSet ls
 
 foldBips :: Monoid m => (DenseLabelSet -> m) -> NewickTree a -> m
 foldBips f tr = F.foldMap f' (labelBips tr)
