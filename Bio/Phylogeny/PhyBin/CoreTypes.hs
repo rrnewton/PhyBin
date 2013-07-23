@@ -1,5 +1,5 @@
 {-# LANGUAGE NamedFieldPuns, BangPatterns #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
@@ -153,6 +153,16 @@ data StandardDecor = StandardDecor {
  }
  deriving (Show,Read,Eq,Ord)
 
+class HasBranchLen a where
+  getBranchLen :: a -> BranchLen
+
+instance HasBranchLen StandardDecor where
+  getBranchLen = branchLen
+
+-- This one is kind of sloppy:
+instance HasBranchLen DefDecor where
+  getBranchLen = snd
+
 -- | A common type of tree contains the standard decorator and also a table for
 -- restoring the human-readable node names.
 data FullTree a =
@@ -246,15 +256,16 @@ get_children (NTInterior _ ls) = ls
 
 
 -- | Average branch length across all branches in all all trees.
-avg_branchlen :: [NewickTree StandardDecor] -> Double
+avg_branchlen :: HasBranchLen a => [NewickTree a] -> Double
 avg_branchlen origls = fst total / snd total
   where
    total = sum_ls $ map sum_tree origls
    sum_ls ls = (sum$ map fst ls, sum$ map snd ls)
-   sum_tree (NTLeaf (StandardDecor{branchLen=0}) _)    = (0,0)
-   sum_tree (NTLeaf (StandardDecor{branchLen}) _)      = (abs branchLen,1)
-   sum_tree (NTInterior (StandardDecor{branchLen}) ls) = 
-       let (x,y) = sum_ls$ map sum_tree ls in
+   sum_tree (NTLeaf dec _) | getBranchLen dec == 0  = (0,0)
+                           | otherwise              = (abs (getBranchLen dec),1)
+   sum_tree (NTInterior dec ls) = 
+       let branchLen = getBranchLen dec
+           (x,y)     = sum_ls$ map sum_tree ls in
        if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)
 
 -- | Retrieve all the bootstraps values actually present in a tree.
