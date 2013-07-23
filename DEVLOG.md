@@ -97,3 +97,7 @@ Tree 233 starts with 13+5 in a three-way split with a big chunk
 containing everything else.
 
 In fact, the RFDistance is three, which is probably right.
+
+[2013.07.23] {Updating set reps, timing}
+----------------------------------------
+

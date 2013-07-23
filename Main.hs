@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 
 module Main where
-import           Data.List (sort)
+import           Data.List (sort, intersperse)
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -24,7 +24,7 @@ import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabL
                                        unitTests, acquireTreeFiles, deAnnotate)
 import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
-import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat, allBips)
+import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat, allBips, dispBip)
 import Bio.Phylogeny.PhyBin.PreProcessor
 
 import qualified Data.Clustering.Hierarchical as C
@@ -209,15 +209,15 @@ testNorm str = do
       bips2  = allBips normed
       added   = S.difference bips2 bips1
       removed = S.difference bips1 bips2
-      dispBips bip = show$
-        map (map (labs M.!)) $ 
-        map IS.toList$ S.toList bip
+      -- dispBips bip = show$
+      --   map (map (labs M.!)) $ 
+      --   map IS.toList$ S.toList bip
   unless (bips1 == bips2) $ do
     putStrLn$ "Normalized this: "++show (displayDefaultTree $ FullTree "" labs parsed)
     putStrLn$ "To this        : "++show (displayDefaultTree $ deAnnotate $ FullTree "" labs normed)
     error$ "Normalization added and removed these bipartitions, respectively:\n  "
-           ++dispBips added ++"\n  "
-           ++dispBips removed
+           ++concat (intersperse " " (map (dispBip labs) (S.toList added))) ++"\n  "
+           ++concat (intersperse " " (map (dispBip labs) (S.toList removed)))
 
 
 --------------------------------------------------------------------------------

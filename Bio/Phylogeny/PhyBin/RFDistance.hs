@@ -2,7 +2,7 @@
 
 module Bio.Phylogeny.PhyBin.RFDistance
        (DenseLabelSet, DistanceMatrix, 
-        allBips, foldBips,
+        allBips, foldBips, dispBip, 
         distanceMatrix, printDistMat)
        where
 
@@ -49,26 +49,39 @@ import           Debug.Trace
 -- 
 --   A set that is more than a majority of the taxa can be normalized by "flipping",
 --   i.e. taking the taxa that are NOT in that set.
-type DenseLabelSet = SI.IntSet 
+#if 1
 -- type DenseLabelSet s = BitList
--- type DenseLabelSet = UB.Vector B.Bit
+type DenseLabelSet = UB.Vector B.Bit
+markLabel lab = UB.modify (\vec -> MV.write vec lab (B.fromBool True)) 
+mkEmptyDense  size = UB.replicate size (B.fromBool False)
+mkSingleDense size ind = markLabel ind (mkEmptyDense size)
+denseUnions        = UB.unions
+bipSize            = U.length
+denseDiff          = UB.difference
 
--- M.write vec lab (B.fromBool True)
--- mkEmptyDense size = U.replicate size (B.fromBool False)    
+dispBip labs bip = show$ map (\(ix,_) -> (labs M.! ix)) $
+                        filter (\(_,bit) -> B.toBool bit) $
+                        zip [0..] (UB.toList bip)
+#else
+type DenseLabelSet = SI.IntSet
+markLabel lab set   = SI.insert lab set 
+mkEmptyDense _size  = SI.empty
+mkSingleDense _size = SI.singleton
+denseUnions _size   = SI.unions 
+bipSize             = SI.size
+denseDiff           = SI.difference
 
--- markLabel lab set = IS.putInSet lab set 
--- mkEmptyDense _size = IS.newEmptySet
+dispBip labs bip = show$ map (map (labs M.!)) $ 
+                         map SI.toList bip
+#endif
 
 markLabel    :: Label -> DenseLabelSet -> DenseLabelSet
 mkEmptyDense :: Int -> DenseLabelSet
 denseUnions  :: Int -> [DenseLabelSet] -> DenseLabelSet
 bipSize      :: DenseLabelSet -> Int
 
-markLabel lab set  = SI.insert lab set 
-mkEmptyDense _size = SI.empty
-denseUnions _size  = SI.unions 
-bipSize            = SI.size
-
+-- | Print a BiPartition in a pretty form
+dispBip      :: LabelTable -> DenseLabelSet -> String
 
 --------------------------------------------------------------------------------
 -- Dirt-simple reference implementation
@@ -103,16 +116,16 @@ labelBips tr =
 
     halfSize = size `quot` 2
     normBip bip =
-      let flipped = SI.difference allLeaves bip in
-      case compare (SI.size bip) halfSize of
+      let flipped = denseDiff allLeaves bip in
+      case compare (bipSize bip) halfSize of
         LT -> bip 
         GT -> flipped -- Flip it
-        EQ -> -- This is a painful case, we need a tie-breaker
-              min bip flipped
+        EQ -> min bip flipped -- This is a painful case, we need a tie-breaker
            
     allLeaves = leafSet tr
-    leafSet (NTLeaf _ lab)    = SI.singleton lab
+    leafSet (NTLeaf _ lab)    = mkSingleDense size lab
     leafSet (NTInterior _ ls) = denseUnions size $ map leafSet ls
+
 
 foldBips :: Monoid m => (DenseLabelSet -> m) -> NewickTree a -> m
 foldBips f tr = F.foldMap f' (labelBips tr)

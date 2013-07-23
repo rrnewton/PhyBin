@@ -30,6 +30,18 @@ parseNewick tbl0 name_hack file input =
   runB file (newick_parser name_hack) $
   B.filter (not . isSpace) input
 
+-- treeFiles <- acquireTreeFiles files
+                     -- let fn f = do raw <- B.readFile f
+                     --               let ls = map (`B.append` (B.pack ";")) $ 
+                     --                        B.splitWith (== ';') raw
+                     --               return (map (f,) ls)
+                     -- trees0 <- concat <$> mapM fn treeFiles
+                     -- FIXME: no name_hack here:
+                     -- let (lbls, trees) = parseNewicks id trees0 
+                     -- putStrLn$ "Read trees! "++show (length trees)
+                     -- putStrLn$ "Taxa: "++show (pPrint lbls)
+                     -- putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
+
 -- | Parse a list of trees, starting with an empty map of labels and accumulating a final map.
 parseNewickFiles :: NameHack -> [String] -> IO (LabelTable, [FullTree DefDecor])
 parseNewickFiles fn nms = do
