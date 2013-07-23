@@ -14,6 +14,8 @@ import           Data.List as L
 import           Text.Parsec
 import           Text.Parsec.ByteString.Lazy
 import           Test.HUnit          ((~:),(~=?),Test,test,assertFailure)
+import           System.FilePath (takeBaseName)
+
 import           Bio.Phylogeny.PhyBin.CoreTypes 
 import           Prelude as P
 
@@ -32,7 +34,7 @@ parseNewick tbl0 name_hack file input =
 parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [FullTree DefDecor])
 parseNewicks name_hack pairs = (labtbl, fullTrs)
  where
-   fullTrs = [ FullTree file labtbl tr
+   fullTrs = [ FullTree (takeBaseName file) labtbl tr
              | (file,_) <- pairs
              | tr       <- trs ]
    (labtbl, trs) = P.foldr fn (M.empty,[]) pairs

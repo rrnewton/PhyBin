@@ -24,7 +24,10 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          PhyBinConfig(..), default_phybin_config,
 
          -- * General helpers
-         Label, LabelTable
+         Label, LabelTable,
+         
+         -- * Experimenting with abstracting decoration operations
+         HasBranchLen(..)
        )
        where
 
@@ -78,6 +81,9 @@ instance Foldable NewickTree where
   foldMap f (NTLeaf dec x) = f dec
   foldMap f (NTInterior dec ls) = mappend (f dec) $
                                   mconcat (map (foldMap f) ls)
+
+instance Foldable FullTree where
+  foldMap f (FullTree _ _ tr) = foldMap f tr
 
 instance Pretty dec => Pretty (NewickTree dec) where 
  -- I'm using displayDefaultTree for the "prettiest" printing and

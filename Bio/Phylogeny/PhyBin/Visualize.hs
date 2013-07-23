@@ -9,7 +9,7 @@ module Bio.Phylogeny.PhyBin.Visualize
        )
        where
 import           Text.Printf        (printf)
-import           Data.List          (elemIndex)
+import           Data.List          (elemIndex, isPrefixOf)
 import           Data.Maybe         (fromJust)
 import           Data.Map           ((!))
 import           Data.Text.Lazy     (pack)
@@ -59,14 +59,18 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
        mapM_ (\x -> G.insMapEdgeM (node, x, branchLen$ get_dec x)) ls
        return ()
 
+-- dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr (Either String String) Double
 dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr String Double
 dendrogramToGraph x = G.run_ G.empty $ void$ loop x
   where
- loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM treename
+ -- deEither (Left s)  = s
+ -- deEither (Right s) = s
+ loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (treename)
  loop node@(C.Branch dist left right) =
     do (_,l) <- loop left
        (_,r) <- loop right
-       let ndname = l++"_"++r
+       let ndname = "DUMMY_"++(l++"_"++r)
+                    -- Right (deEither l ++"_"++ deEither r)
        (midN,mid) <- G.insMapNodeM ndname
        G.insMapEdgeM (l, mid, dist)
        G.insMapEdgeM (r, mid, dist)
@@ -100,8 +104,11 @@ default_cmd = Gv.Neato
 -- Show a float without scientific notation:
 myShowFloat :: Double -> String
 -- showFloat weight = showEFloat (Just 2) weight ""
-myShowFloat fl = printf "%.4f" fl
-
+myShowFloat fl =
+  let rnd = round fl in
+  if fl == fromIntegral rnd
+  then show rnd
+  else printf "%.4f" fl
 
 dotToPDF :: Gv.DotGraph G.Node -> FilePath -> IO FilePath
 dotToPDF dot file =
@@ -130,6 +137,7 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
   edgeAttrs = getEdgeAttrs edge_scale
 
 
+getEdgeAttrs :: Double -> (t, t1, Double) -> [GA.Attribute]
 getEdgeAttrs edge_scale = edgeAttrs
  where 
   -- TOGGLE:
@@ -141,7 +149,8 @@ getEdgeAttrs edge_scale = edgeAttrs
                             GA.Label$ GA.StrLabel$ pack$ myShowFloat weight] ++ -- TEMPTOGGLE
 			   --[ArrowHead noArrow, GA.Label (StrLabel$ show draw_weight)] ++ -- TEMPTOGGLE
 			    if weight == 0.0
-			    then [GA.Color [weighted$ GA.X11Color Gv.Red], GA.Len minlen]
+			    then [GA.Color [weighted$ GA.X11Color Gv.Red],
+                                  GA.LWidth 3.0, GA.Len minlen]
 			    else [GA.Len draw_weight]
 
   weighted c = GC.WC {GC.wColor=c, GC.weighting=Nothing}
@@ -153,22 +162,30 @@ getEdgeAttrs edge_scale = edgeAttrs
     (min scaled maxlen)
 
 -- | Some duplicated code with dotNewickTree.
-dotDendrogram :: String -> Double -> C.Dendrogram (FullTree StandardDecor) -> Gv.DotGraph G.Node
+dotDendrogram :: String -> Double -> C.Dendrogram (FullTree a) -> Gv.DotGraph G.Node
 dotDendrogram title edge_scale dendro =
   Gv.graphToDot myparams graph
  where
-  graph :: G.Gr String Double
+--  graph :: G.Gr (Either String String) Double
+  graph :: G.Gr String Double   
   graph = dendrogramToGraph dendro
-  myparams :: Gv.GraphvizParams G.Node String Double () String
+  myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
                                 Gv.fmtNode= nodeAttrs,
                                 Gv.fmtEdge= edgeAttrs
                               }
 --  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
   nodeAttrs :: (Int, String) -> [GA.Attribute]
-  nodeAttrs (_num, treename) =
-    [ GA.Label$ GA.StrLabel$ pack treename
-    , GA.Shape (case treename of "" -> GA.PointShape; _ -> GA.Ellipse)
+  nodeAttrs (_num, eith) =
+    let (tag,shp) = -- case eith of
+          -- Left treename -> (take 60 treename, GA.Ellipse)
+          -- Right _       -> ("", GA.PointShape)
+          if isPrefixOf "DUMMY_" eith
+          then ("", GA.PointShape)          
+          else (take 60 eith, GA.Ellipse)
+    in 
+    [ GA.Label$ GA.StrLabel$ pack tag
+    , GA.Shape shp
     , GA.Style [GA.SItem GA.Filled []]
     ]
   edgeAttrs = getEdgeAttrs edge_scale

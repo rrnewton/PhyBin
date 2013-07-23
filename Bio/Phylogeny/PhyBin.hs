@@ -14,15 +14,17 @@ module Bio.Phylogeny.PhyBin
 
 import qualified Data.Foldable as F
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy)
+import           Data.List           (delete, minimumBy, sortBy, foldl1')
 import           Data.Maybe          (fromMaybe)
 import           Data.Either         (partitionEithers)
+import           Data.Time.Clock
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
 import qualified Data.Vector                 as V
 import qualified Data.Vector.Unboxed         as U
 import           Control.Monad       (forM, forM_, filterM, when, unless)
+import           Control.Concurrent.Async
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
@@ -40,7 +42,7 @@ import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick, parseNewicks)
 import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
-import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
+import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree, dotDendrogram)
 import           Bio.Phylogeny.PhyBin.RFDistance
 import           Bio.Phylogeny.PhyBin.Binning
 import           Bio.Phylogeny.PhyBin.Util
@@ -132,13 +134,18 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
       putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings2)
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length validtrees)
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
+    let all_branches = concatMap (F.foldr' (\x ls -> getBranchLen x:ls) []) validtrees
+    putStrLn$ "Average branch len over valid trees: "++ show (avg all_branches)
+    putStrLn$ "Max/Min branch lengths: "++ show (foldl1' max all_branches,
+                                                 foldl1' min all_branches)
 
     --------------------------------------------------------------------------------
     -- Next, dispatch on the mode and do the actual clustering or binning.
     --------------------------------------------------------------------------------
 
-    classes <- case clust_mode of
-      BinThem         -> doBins validtrees 
+    (classes,asyncs) <- case clust_mode of
+      BinThem         -> do x <- doBins validtrees
+                            return (x,[])
       ClusterThem lnk -> do
         (mat, dendro) <- doCluster lnk validtrees        
         case print_rfmatrix of
@@ -158,9 +165,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
         writeFile (combine output_dir ("dendrogram.txt"))
                   (show$ fmap treename dendro)
         putStrLn "Wrote full dendrogram to file dendrogram.txt"
-        
---           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs)) fullAvgTr
---	   _ <- dotToPDF dot (base i size ++ ".pdf")
+
+        gvizAsync <- async $ do
+          t0 <- getCurrentTime
+          let dot = dotDendrogram "dendrogram" 1.0 dendro
+          _ <- dotToPDF dot (combine output_dir "dendrogram.pdf")
+          t1 <- getCurrentTime          
+          putStrLn$ "Wrote dendrogram diagram to file dendrogram.pdf ("++show(diffUTCTime t1 t0)++")"
 
         hnd <- openFile  (combine output_dir ("distance_matrix.txt")) WriteMode
         printDistMat hnd mat
@@ -175,7 +186,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
                   | otherwise          = [flattenDendro br]
                 loop br@(C.Leaf _)     = [flattenDendro br]
             -- Flatten out the dendogram:
-            return (clustsToMap $ loop dendro)
+            return (clustsToMap $ loop dendro, [gvizAsync])
     binlist <- reportClusts clust_mode classes
         
     ----------------------------------------
@@ -213,6 +224,9 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
       BinThem         -> outputBins binlist output_dir do_graph
       ClusterThem lnk -> outputClusters binlist output_dir do_graph
 
+    -- Wait on parallel tasks:
+    putStrLn$ "Waiting for asynchronous tasks to finish..."
+    mapM_ wait asyncs 
     putStrLn$ "Finished."
     --------------------------------------------------------------------------------
     -- End driver
@@ -260,8 +274,8 @@ reportClusts mode classes = do
 
     putStrLn$ " [outcome] "++show (length binlist)++" bins found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
-    putStrLn$"  ALL bin sizes, excluding singletons:"
-    forM_ (zip [1..] binlist) $ \ (ind, (len, tr, OneCluster ftrees)) -> do
+    putStrLn$"  First 50 bin sizes, excluding singletons:"
+    forM_ (zip [1..50] binlist) $ \ (ind, (len, tr, OneCluster ftrees)) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$show$
            hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
@@ -401,3 +415,5 @@ avg_trees origls =
 
 -- Used only by avg_trees above...
 type TempDecor = (Double, (Int, Int), Int, [Label])
+
+avg ls = sum ls / fromIntegral (length ls)
