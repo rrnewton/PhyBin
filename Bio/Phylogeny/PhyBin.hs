@@ -41,7 +41,7 @@ import qualified Data.Clustering.Hierarchical as C
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick, parseNewicks)
-import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
+import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranchLenThresh)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree, dotDendrogram)
 import           Bio.Phylogeny.PhyBin.RFDistance
 import           Bio.Phylogeny.PhyBin.Binning
@@ -75,7 +75,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
       case c of
         ExitSuccess     -> return ()
         ExitFailure cde -> error$"Could not create output directory. 'mkdir' command failed with: "++show cde
-    
+
+    putStrLn$ "Cleaning away previous phybin outputs..."
+    system$ "rm -f "++output_dir++"/dendogram.*"
+    system$ "rm -f "++output_dir++"/cluster*"
+    system$ "rm -f "++output_dir++"/distance_matrix.txt"
+    system$ "rm -f "++output_dir++"/WARNINGS.txt"
+
     putStrLn$ "Parsing "++show (length files)++" Newick tree files."
     --putStrLn$ "\nFirst ten \n"++ concat (map (++"\n") $ map show $ take 10 files)
 
@@ -102,10 +108,9 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     let do_one :: FullTree DefDecor -> IO (Int, [FullTree DefDecor], [(Int, String)])
         do_one (FullTree treename lblAcc parsed) = do 
            let 
-               collapser _ _  = (Nothing,0)
                pruned = case branch_collapse_thresh of 
                          Nothing  -> parsed
-                         Just thr -> collapseBranches ((< thr) . snd) collapser parsed
+                         Just thr -> collapseBranchLenThresh thr parsed
                numL   = numLeaves pruned
                
            -- TEMPTOGGLE
@@ -214,7 +219,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
 
     unless (null warnings1 && null warnings2) $
-	writeFile (combine output_dir (filePrefix ++ "_WARNINGS.txt"))
+	writeFile (combine output_dir "WARNINGS.txt")
 		  ("This file was generated to record all of the files which WERE NOT incorporated successfully into the results.\n" ++
 		   "Each of these files had some kind of problem, likely one of the following:\n"++
 		   "  (1) a mismatched number of taxa (leaves) in the tree relative to the rest of the dataset\n"++
@@ -277,7 +282,7 @@ reportClusts mode binlist = do
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
         binsizes = map fst3 binlist
 
-    putStrLn$ " [outcome] "++show (length binlist)++" bins found, "++show (length$ takeWhile (>1) binsizes)
+    putStrLn$ " Outcome: "++show (length binlist)++" clusters found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
     putStrLn$"  First 50 bin sizes, excluding singletons:"
     forM_ (zip [1..50] binlist) $ \ (ind, (len, tr, OneCluster ftrees)) -> do
@@ -332,8 +337,8 @@ outputClusters binlist output_dir do_graph = do
        -- TODO: CONSENSUS TREE:
        -- writeFile   (base i size ++".tr")  (show (displayDefaultTree$ deAnnotate fullAvgTr) ++ ";\n") -- FIXME
 
-    putStrLn$ "[finished] Wrote contents of each bin to bin<N>_<binsize>.txt"
-    putStrLn$ "           Wrote representative trees to bin<N>_<binsize>.tr"  
+    putStrLn$ "[finished] Wrote contents of each cluster to cluster<N>_<size>.txt"
+    putStrLn$ "           Wrote representative trees to cluster<N>_<size>.tr"  
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
       forM_ (zip [1::Int ..] binlist) $ \ (i, (size, _tr, OneCluster membs)) -> do
@@ -342,7 +347,7 @@ outputClusters binlist output_dir do_graph = do
 --           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs)) fullAvgTr
 --	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
-      putStrLn$ "[finished] Wrote visual representations of trees to "++filePrefix++"<N>_<binsize>.pdf"
+      putStrLn$ "[finished] Wrote visual representations of trees to "++filePrefix++"<N>_<size>.pdf"
 
     return ()
 

@@ -11,6 +11,7 @@ import           Control.Concurrent    (Chan, readChan, ThreadId, forkIO)
 import           System.Environment    (getArgs, withArgs)
 import           System.Console.GetOpt (OptDescr(Option), ArgDescr(..), ArgOrder(..), usageInfo, getOpt)
 import           System.Exit           (exitSuccess)
+import           System.IO             (stdout) 
 import           Test.HUnit            (runTestTT, Test, test)
 
 import Control.Applicative ((<$>))
@@ -20,9 +21,10 @@ import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import Bio.Phylogeny.PhyBin.CoreTypes          
 import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists,
                                        unitTests, acquireTreeFiles, deAnnotate)
-import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, unitTests)
+import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
 import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat)
+import Bio.Phylogeny.PhyBin.PreProcessor
 
 import qualified Data.Clustering.Hierarchical as C
 
@@ -277,6 +279,31 @@ name_table_reader file =
 
 temp :: IO ()
 temp = driver default_phybin_config{ num_taxa=7, inputs=["../datasets/test.tr"] }
+
+
+-- 112 and 13
+rftest = do 
+  (mp,[t1,t2]) <- parseNewickFiles (take 2) ["tests/13.tr", "tests/112.tr"]
+  putStrLn$ "Tree 13           : " ++ show (displayDefaultTree t1)
+  putStrLn$ "Tree 112          : "++ show (displayDefaultTree t2)
+
+  putStrLn$ "Tree 13 normed    : "++ show (disp t1)
+  putStrLn$ "Tree 112 normed   : "++ show (disp t2)
+
+  putStrLn$ "13  collapsed 0.02: " ++show (disp$ liftFT (collapseBranchLenThresh 0.02) t1)
+  putStrLn$ "112 collapsed 0.02: " ++show (disp$ liftFT (collapseBranchLenThresh 0.02) t2)
+
+  putStrLn$ "13  collapsed 0.03: " ++show (disp$ liftFT (collapseBranchLenThresh 0.03) t1)
+  putStrLn$ "112 collapsed 0.03: " ++show (disp$ liftFT (collapseBranchLenThresh 0.03) t2)  
+
+  let mat = distanceMatrix [nwtree t1, nwtree t2]
+  printDistMat stdout mat
+  return ()
+ where
+  disp (FullTree nm labs tr) =
+    let collapsed :: AnnotatedTree 
+        collapsed = normalize$ annotateWLabLists tr
+    in displayDefaultTree$ deAnnotate $  FullTree nm labs collapsed
 
 ----------------------------------------------------------------------------------------------------
 -- TODO: expose a command line argument for testing.

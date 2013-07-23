@@ -6,7 +6,7 @@
 module Bio.Phylogeny.PhyBin.PreProcessor
        where
 
-import  Bio.Phylogeny.PhyBin.CoreTypes (NewickTree(..), DefDecor, Label)
+import  Bio.Phylogeny.PhyBin.CoreTypes 
 
 -- | Removes branches that do not meet a predicate, leaving a shallower, "bushier"
 --   tree.  This does NOT change the set of leaves (taxa), it only removes interior
@@ -38,3 +38,12 @@ collapseBranches isCollapsable collapse origtr = final
       else
         -- Otherwise this is the end of the road for these floaters:
         ([], [thenode], thenode)
+
+
+-- | A common configuration.  Collapse branches based on threshold.
+collapseBranchLenThresh :: Double -> NewickTree DefDecor -> NewickTree DefDecor
+-- collapseBranchLenThresh :: HasBranchLen a => Double -> NewickTree a -> NewickTree a    
+collapseBranchLenThresh thr tr =
+  collapseBranches ((< thr) . getBranchLen) collapser tr
+  where
+    collapser _dec1 _dec2  = (Nothing,0)

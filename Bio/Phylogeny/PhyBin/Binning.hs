@@ -8,7 +8,7 @@
 
 module Bio.Phylogeny.PhyBin.Binning
        ( -- * Binning and normalization
-         binthem, normalize, annotateWLabLists, 
+         binthem, normalize, normalizeFT, annotateWLabLists, 
          deAnnotate, OneCluster(..), BinResults, StrippedTree,
          -- * Utilities and unit tests
          get_weight, unitTests, anonymize_annotated
@@ -79,6 +79,9 @@ compare_childtrees node1 node2 =
 	    x  -> x
      x -> x
 
+-- | A version lifted to operate over full trees.
+normalizeFT :: FullTree StandardDecor -> FullTree StandardDecor
+normalizeFT (FullTree nm labs tr) = FullTree nm labs (normalize tr)
 
 -- | This is it, here's the routine that transforms a tree into normal form.
 --   This relies HEAVILY on lazy evaluation.

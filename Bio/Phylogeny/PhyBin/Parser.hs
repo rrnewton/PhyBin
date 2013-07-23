@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Bio.Phylogeny.PhyBin.Parser
-       (newick_parser, parseNewick, parseNewicks, unitTests)
+       (newick_parser, parseNewick, parseNewicks, parseNewickFiles, unitTests)
        where
 import           Control.Exception  (evaluate, handle, SomeException)
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -31,6 +31,12 @@ parseNewick tbl0 name_hack file input =
   B.filter (not . isSpace) input
 
 -- | Parse a list of trees, starting with an empty map of labels and accumulating a final map.
+parseNewickFiles :: NameHack -> [String] -> IO (LabelTable, [FullTree DefDecor])
+parseNewickFiles fn nms = do
+  bss <- mapM B.readFile nms
+  return $ parseNewicks fn (zip nms bss)
+
+-- | A version which takes in-memory trees as ByteStrings.
 parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [FullTree DefDecor])
 parseNewicks name_hack pairs = (labtbl, fullTrs)
  where
@@ -75,6 +81,7 @@ extractLabelTable tbl0 tr = (finMap,finTree)
 -- | Hack: we store the names in the leaves.
 type TempTree = NewickTree (DefDecor,Maybe String)
 
+-- | This is used to post-facto splice metadata into the data structure.
 tag :: DefDecor -> TempTree -> TempTree
 tag l s =
   case s of 

@@ -13,7 +13,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          
          -- * Tree operations
          displayDefaultTree,
-         treeSize, numLeaves,
+         treeSize, numLeaves, liftFT,
          get_dec, set_dec, get_children, 
          map_labels, all_labels, foldIsomorphicTrees,
 
@@ -103,8 +103,9 @@ instance (Pretty k, Pretty v) => Pretty (M.Map k v) where
 
 -- | Display a tree WITH the bootstrap and branch lengths.
 displayDefaultTree :: FullTree DefDecor -> Doc
-displayDefaultTree (FullTree _ mp tr) = loop tr
+displayDefaultTree orig = loop tr
   where
+    (FullTree _ mp tr) = orig -- normalize orig
     loop (NTLeaf (Nothing,_) name)     = text (mp M.! name)
     loop (NTLeaf _ _)                  = error "WEIRD -- why did a leaf node have a bootstrap value?"
     loop (NTInterior (bootstrap,_) ls) = 
@@ -177,6 +178,9 @@ data FullTree a =
            , nwtree     :: NewickTree a 
            }
  deriving (Show)
+
+liftFT :: (NewickTree t -> NewickTree a) -> FullTree t -> FullTree a
+liftFT fn (FullTree nm labs x) = FullTree nm labs (fn x)
 
 type TreeName = String
 
