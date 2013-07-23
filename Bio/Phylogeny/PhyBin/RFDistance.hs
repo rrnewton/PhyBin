@@ -66,8 +66,9 @@ distanceMatrix :: [NewickTree a] -> DistanceMatrix
 distanceMatrix lst = 
    let sz = P.length lst
        eachbips = V.fromList $ map allBips lst
-   in V.generate (sz-1) $ \ i -> 
-      U.generate i $ \ j ->
+--   in V.generate (sz-1) $ \ i ->
+   in V.generate sz $ \ i ->        
+      U.generate i  $ \ j ->
       S.size (S.difference (eachbips V.! i) (eachbips V.! j))
   
 -- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
