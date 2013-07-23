@@ -57,7 +57,7 @@ debug = True
 
 -- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
-driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
+driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
             do_graph, branch_collapse_thresh,
             dist_thresh, clust_mode, print_rfmatrix } =
    -- Unused: do_draw
@@ -68,7 +68,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     cd <- getCurrentDirectory 
     --putStrLn$ "PHYBIN RUNNING IN DIRECTORY: "++ cd
 
-    files <- acquireTreeFiles inputs
     bl <- doesDirectoryExist output_dir
     unless bl $ do
       c <- system$ "mkdir -p "++output_dir
@@ -77,7 +76,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
         ExitFailure cde -> error$"Could not create output directory. 'mkdir' command failed with: "++show cde
 
     putStrLn$ "Cleaning away previous phybin outputs..."
-    system$ "rm -f "++output_dir++"/dendogram.*"
+    system$ "rm -f "++output_dir++"/dendrogram.*"
     system$ "rm -f "++output_dir++"/cluster*"
     system$ "rm -f "++output_dir++"/distance_matrix.txt"
     system$ "rm -f "++output_dir++"/WARNINGS.txt"

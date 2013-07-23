@@ -15,3 +15,79 @@ Making the labels into Ints and switching to IntSet has sped up the
 retina.
 
 
+[2013.07.23] {Debugging}
+------------------------
+
+Ok, clustering on RFDistance with --editdist 0 should give the same
+answers as phybin --bin, but it's not!
+
+On Irene's current Wolbachia dataset, traditional phybin --bin comes
+up with this as its top cluster:
+
+    RAxML_bipartitions.88
+    RAxML_bipartitions.506
+    RAxML_bipartitions.476
+    RAxML_bipartitions.39
+    RAxML_bipartitions.386
+    RAxML_bipartitions.321
+    RAxML_bipartitions.3
+    RAxML_bipartitions.276
+    RAxML_bipartitions.260
+    RAxML_bipartitions.256
+    RAxML_bipartitions.233
+    RAxML_bipartitions.197
+    RAxML_bipartitions.171
+    RAxML_bipartitions.165
+    RAxML_bipartitions.141
+    RAxML_bipartitions.116
+
+By contrast, --UPGMA --editdist0 comes up with this:
+
+    RAxML_bipartitions.120
+    RAxML_bipartitions.167
+    RAxML_bipartitions.250
+    RAxML_bipartitions.38
+    RAxML_bipartitions.444
+    RAxML_bipartitions.494
+    
+This is with no branch-collapsing...  Ugh, that's no ovelap at all.
+If we look at the second bin for --UPGMA though, we see overlap:
+
+    RAxML_bipartitions.233
+    RAxML_bipartitions.3
+    RAxML_bipartitions.321
+    RAxML_bipartitions.39
+    RAxML_bipartitions.476
+    RAxML_bipartitions.88
+
+Ok, at least one is a subset of the other this time... and here's the diff:
+
+    RAxML_bipartitions.116
+    RAxML_bipartitions.141
+    RAxML_bipartitions.165
+    RAxML_bipartitions.171
+    RAxML_bipartitions.197
+    RAxML_bipartitions.256
+    RAxML_bipartitions.260
+    RAxML_bipartitions.276
+    RAxML_bipartitions.386
+    RAxML_bipartitions.506
+
+And here's the tree that phybin --bin produced:
+
+   ((14, 3_), (19, (5_, 13)), ((1_, 2_), (7_, (18, 6_))));
+
+I singled out 116 and 233, and then printed their normalized forms
+using "phybin -p 2 --printnorms tests/t2/*":
+
+    Tree "116"
+    (3_, ((((6_, 18), 7_), (2_, 1_)), (19, (13, 5_))), 14)
+    Tree "233"
+    (5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13)
+
+Huh!  These show that they ARE in fact different...  It looks like
+traditional phybin was somehow incorrectly grouping them.
+
+But the weird thing is that phybin uses equality on the normalized
+form to define equivalence!  And those normal forms are not the
+same...  

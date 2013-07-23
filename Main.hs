@@ -49,7 +49,7 @@ data Flag
     | TabDelimited Int Int
 
     | SelfTest
-    | RFMatrix
+    | RFMatrix | LineSetDiffMode | PrintNorms 
     | Cluster C.Linkage
     | BinningMode
     | EditDistThresh Int
@@ -73,7 +73,6 @@ options =
 
      , Option ['o']     ["output"]  (ReqArg Output "DIR")  "set directory to contain all output files (default \"./phybin_out/\")"
      , Option []     ["selftest"]   (NoArg SelfTest)   "run internal unit tests"
-     , Option []     ["rfdist"]     (NoArg RFMatrix)   "print a Robinson Foulds distance matrix for the input trees"
        
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option []        []          (NoArg NullOpt)  ""
@@ -134,6 +133,12 @@ options =
 		  "to compute taxa names, e.g. if multiple genes/plasmids map onto one taxa.\n"++
 		  "This option specifies a text file with find/replace entries of the form\n"++
 		  "\"<string> <taxaname>\", which are applied AFTER -s and -p."
+                  
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Utility Modes ----------------------------"
+     , Option [] ["rfdist"]  (NoArg RFMatrix)        "print a Robinson Foulds distance matrix for the input trees"
+     , Option [] ["setdiff"] (NoArg LineSetDiffMode) "for convenience, print the set difference between cluster*.txt files"
+     , Option [] ["printnorms"] (NoArg PrintNorms)   "simply print out a concise and normalized form of each input tree"
      ]
 
 usage :: String
@@ -191,6 +196,7 @@ main =
 	 (o,n,[]  ) -> return (o,n)
          (_,_,errs) -> defaultErr errs
 
+     all_inputs <- acquireTreeFiles files
      let process_opt cfg opt = case opt of 
 	   NullOpt -> return cfg
 	   Verbose -> return cfg { verbose= True } 
@@ -200,6 +206,18 @@ main =
 
      	   RFMatrix -> return cfg { print_rfmatrix= True }
 
+           LineSetDiffMode -> do
+             bss <- mapM B.readFile files
+             case map (S.fromList . B.lines) bss of
+               [set1,set2] -> do let [f1,f2] = files
+                                 let diff = S.difference set1 set2
+                                 putStrLn$" Found "++show(S.size diff)++" lines occuring in "++f1++" but not "++f2
+                                 mapM_ B.putStrLn $ S.toList diff
+               oth -> error $"Line set difference mode expects two files as input, got "++show(length oth)
+             exitSuccess
+
+           PrintNorms -> return cfg
+     
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
            BinningMode -> return cfg { clust_mode = BinThem }
            EditDistThresh n -> return cfg { dist_thresh = Just n }
@@ -225,17 +243,27 @@ main =
 	   NameTable file -> do reader <- name_table_reader file
 				return cfg { name_hack = reader . name_hack cfg }
 
-
-     config <- foldM process_opt default_phybin_config{ inputs=files } 
+     config <- foldM process_opt default_phybin_config{ inputs= all_inputs } 
 	             (sort opts) -- NOTE: options processed in sorted order.
 
      when (null files) $ do
 	defaultErr ["No file arguments!\n"]
 
-     if View `elem` opts 
-      then view_graphs config
-      --else driver config{ name_hack= name_hack_legionella }
-      else driver config
+     ------------------------------------------------------------
+     -- This mode kicks in AFTER config options are processed.
+     when (elem PrintNorms opts) $ do 
+       (_,fts) <- parseNewickFiles (name_hack config) all_inputs
+       forM_ fts $ \ ft@(FullTree name _ _) -> do
+         putStrLn $ "Tree "++show name
+         putStrLn$ show$ displayDefaultTree ft
+         exitSuccess
+     ------------------------------------------------------------
+     when (View `elem` opts) $ do 
+       view_graphs config
+       exitSuccess
+     ------------------------------------------------------------
+     -- Otherwise do the main, normal thing:
+     driver config
 
 view_graphs :: PhyBinConfig -> IO ()
 view_graphs PBC{..} = 
@@ -265,7 +293,8 @@ name_table_reader file =
 	      lines contents
      return$ 
        \ name_to_hack -> 
-	   case M.lookup name_to_hack mp of -- Could use a trie
+
+       case M.lookup name_to_hack mp of -- Could use a trie
 	     Just x -> x
 	     Nothing -> name_to_hack
   where
