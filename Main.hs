@@ -87,7 +87,7 @@ options =
      , Option []    ["UPGMA"]    (NoArg$ Cluster C.UPGMA)          $  "Use Unweighted Pair Group Method (average linkage)"
 
      , Option []    ["editdist"]  (ReqArg (EditDistThresh . read) "DIST")$
-                                  "Report a flat set of clusters that are separated by at least the given tree edit-distance"
+                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters."
      , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
        
      , Option []        []          (NoArg NullOpt)  ""

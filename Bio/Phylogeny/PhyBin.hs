@@ -143,9 +143,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
     -- Next, dispatch on the mode and do the actual clustering or binning.
     --------------------------------------------------------------------------------
 
-    (classes,asyncs) <- case clust_mode of
+    (classes,binlist,asyncs) <- case clust_mode of
       BinThem         -> do x <- doBins validtrees
-                            return (x,[])
+                            -- A list of bins, sorted by size:
+                            let binlist = reverse $ sortBy (compare `on` fst3) $
+                                          map (\ (tr,OneCluster ls) -> (length ls, tr, OneCluster ls)) $
+                                          M.toList x
+                            return (x,binlist,[])
       ClusterThem lnk -> do
         (mat, dendro) <- doCluster lnk validtrees        
         case print_rfmatrix of
@@ -180,14 +184,16 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
         case dist_thresh of
           Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
           Just dstThresh -> do
-            let dstThresh' = fromIntegral dstThresh 
-            let loop br@(C.Branch dist left right)
-                  | dist >= dstThresh' = loop left ++ loop right
-                  | otherwise          = [flattenDendro br]
-                loop br@(C.Leaf _)     = [flattenDendro br]
+            putStrLn$ "Combining all clusters at distance less than or equal to "++show dstThresh
+            let clusts = sliceDendro (fromIntegral dstThresh) dendro
+                wlens  = map (\ (OneCluster l) -> (length l, error "need consensus tree", OneCluster l)) clusts
+                sorted0 = reverse$ sortBy (compare `on` fst3) wlens
+--                sorted  = map thd3 sorted0
+            putStrLn$ "After flattening, cluster sizes are: "++show (map fst3 sorted0)
             -- Flatten out the dendogram:
-            return (clustsToMap $ loop dendro, [gvizAsync])
-    binlist <- reportClusts clust_mode classes
+            return (clustsToMap clusts, sorted0, [gvizAsync])
+
+    reportClusts clust_mode binlist
         
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
@@ -264,10 +270,9 @@ doCluster linkage validtrees = do
   -- putStrLn$ "Got the distance matrix ...  "++show (V.length mat)
   return (mat,dendro)
   
-reportClusts :: ClustMode -> BinResults StandardDecor -> IO [(Int, StrippedTree, OneCluster StandardDecor)]
-reportClusts mode classes = do 
-    let binlist = reverse $ sortBy (compare `on` fst3) $
-		  map (\ (tr,OneCluster ls) -> (length ls, tr, OneCluster ls)) $ M.toList classes
+-- reportClusts :: ClustMode -> BinResults StandardDecor -> IO [(Int, StrippedTree, OneCluster StandardDecor)]
+reportClusts mode binlist = do 
+    let 
         taxa :: S.Set Int
 	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
         binsizes = map fst3 binlist
@@ -278,7 +283,7 @@ reportClusts mode classes = do
     forM_ (zip [1..50] binlist) $ \ (ind, (len, tr, OneCluster ftrees)) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$show$
-           hcat [text ("  * bin#"++show ind++", members "++ show len ++", "), 
+           hcat [text ("  * cluster#"++show ind++", members "++ show len ++", "), 
                  case mode of
                    BinThem -> vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees$ map nwtree ftrees)++", "),
                                     text "all: " <> pPrint (filter (not . null) $ map (get_bootstraps . nwtree) ftrees)]
@@ -305,6 +310,16 @@ flattenDendro dendro =
  where
    appendClusts (OneCluster ls1) (OneCluster ls2) = OneCluster (ls1++ls2)
    
+-- | Turn a hierarchical clustering into a flat clustering.
+sliceDendro :: Double -> (C.Dendrogram (FullTree DefDecor)) -> [OneCluster StandardDecor]
+sliceDendro dstThresh den = loop den
+  where 
+   loop br@(C.Branch dist left right)
+     -- Too far apart to combine:
+     | dist > dstThresh  = loop left ++ loop right
+     | otherwise         = [flattenDendro br]
+   loop br@(C.Leaf _)    = [flattenDendro br]
+
 
 --------------------------------------------------------------------------------
 
