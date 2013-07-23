@@ -50,7 +50,7 @@ data Flag
     | TabDelimited Int Int
 
     | SelfTest
-    | RFMatrix | LineSetDiffMode | PrintNorms 
+    | RFMatrix | LineSetDiffMode | PrintNorms | PrintReg
     | Cluster C.Linkage
     | BinningMode
     | EditDistThresh Int
@@ -139,7 +139,8 @@ options =
      , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Utility Modes ----------------------------"
      , Option [] ["rfdist"]  (NoArg RFMatrix)        "print a Robinson Foulds distance matrix for the input trees"
      , Option [] ["setdiff"] (NoArg LineSetDiffMode) "for convenience, print the set difference between cluster*.txt files"
-     , Option [] ["printnorms"] (NoArg PrintNorms)   "simply print out a concise and normalized form of each input tree"
+     , Option [] ["print"]      (NoArg PrintReg)     "simply print out a concise form of each input tree"       
+     , Option [] ["printnorms"] (NoArg PrintNorms)   "simply print out a concise and NORMALIZED form of each input tree"
      ]
 
 usage :: String
@@ -251,6 +252,7 @@ main =
              exitSuccess
 
            PrintNorms -> return cfg
+           PrintReg   -> return cfg           
      
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
            BinningMode -> return cfg { clust_mode = BinThem }
@@ -285,10 +287,17 @@ main =
 
      ------------------------------------------------------------
      -- This mode kicks in AFTER config options are processed.
-     when (elem PrintNorms opts) $ do 
+     when (elem PrintReg opts) $ do 
        (_,fts) <- parseNewickFiles (name_hack config) all_inputs
        forM_ fts $ \ ft@(FullTree name _ _) -> do
          putStrLn $ "Tree "++show name
+         putStrLn$ show$ displayDefaultTree ft
+       exitSuccess
+     ------------------------------------------------------------
+     when (elem PrintNorms opts) $ do 
+       (_,fts) <- parseNewickFiles (name_hack config) all_inputs
+       forM_ fts $ \ ft@(FullTree name _ _) -> do
+         putStrLn $ "Tree , NORMALIZED:"++show name
          putStrLn$ show$ displayDefaultTree$ deAnnotate $
            liftFT (normalize . annotateWLabLists) ft
        exitSuccess
