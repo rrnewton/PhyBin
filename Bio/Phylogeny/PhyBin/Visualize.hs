@@ -2,19 +2,26 @@
 
 module Bio.Phylogeny.PhyBin.Visualize
        (dotNewickTree, dotToPDF, viewNewickTree,
-        dotNewickTree_debug)
+        dotNewickTree_debug,
+
+        -- * Dendrogram visualization
+        dendrogramToGraph, dotDendrogram
+       )
        where
 import           Text.Printf        (printf)
 import           Data.List          (elemIndex)
 import           Data.Maybe         (fromJust)
 import           Data.Map           ((!))
 import           Data.Text.Lazy     (pack)
+import           Control.Monad      (void)
 import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
 import qualified Data.Graph.Inductive as G  hiding (run)
 import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
 import qualified Data.GraphViz.Attributes.Colors   as GC
 -- import           Test.HUnit          ((~:),(~=?),Test,test)
+
+import qualified Data.Clustering.Hierarchical as C
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
 
@@ -51,6 +58,20 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
        -- Edge weights as just branchLen (not bootstrap):
        mapM_ (\x -> G.insMapEdgeM (node, x, branchLen$ get_dec x)) ls
        return ()
+
+dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr String Double
+dendrogramToGraph x = G.run_ G.empty $ void$ loop x
+  where
+ loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM treename
+ loop node@(C.Branch dist left right) =
+    do (_,l) <- loop left
+       (_,r) <- loop right
+       let ndname = l++"_"++r
+       (midN,mid) <- G.insMapNodeM ndname
+       G.insMapEdgeM (l, mid, dist)
+       G.insMapEdgeM (r, mid, dist)
+       return (midN,mid)
+
 
 -- | Open a GUI window to displaya tree.
 --
@@ -106,7 +127,11 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
     , GA.Shape (if null children then {-PlainText-} GA.Ellipse else GA.PointShape)
     , GA.Style [GA.SItem GA.Filled []]
     ]
+  edgeAttrs = getEdgeAttrs edge_scale
 
+
+getEdgeAttrs edge_scale = edgeAttrs
+ where 
   -- TOGGLE:
   --  edgeAttrs (_,_,weight) = [ArrowHead noArrow, Len (weight * edge_scale + bump), GA.Label (StrLabel$ show (weight))]
   edgeAttrs (_,_,weight) = 
@@ -126,6 +151,27 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
     let scaled = (abs w) * scale + minlen in 
     -- Don't draw them too big or it gets annoying:
     (min scaled maxlen)
+
+-- | Some duplicated code with dotNewickTree.
+dotDendrogram :: String -> Double -> C.Dendrogram (FullTree StandardDecor) -> Gv.DotGraph G.Node
+dotDendrogram title edge_scale dendro =
+  Gv.graphToDot myparams graph
+ where
+  graph :: G.Gr String Double
+  graph = dendrogramToGraph dendro
+  myparams :: Gv.GraphvizParams G.Node String Double () String
+  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
+                                Gv.fmtNode= nodeAttrs,
+                                Gv.fmtEdge= edgeAttrs
+                              }
+--  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
+  nodeAttrs :: (Int, String) -> [GA.Attribute]
+  nodeAttrs (_num, treename) =
+    [ GA.Label$ GA.StrLabel$ pack treename
+    , GA.Shape (case treename of "" -> GA.PointShape; _ -> GA.Ellipse)
+    , GA.Style [GA.SItem GA.Filled []]
+    ]
+  edgeAttrs = getEdgeAttrs edge_scale
 
 
 -- | This version shows the ordered/rooted structure of the normalized tree.

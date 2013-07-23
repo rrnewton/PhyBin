@@ -11,6 +11,7 @@ import qualified Data.Vector.Unboxed         as U
 import qualified Data.Vector.Unboxed.Bit     as UB
 import qualified Data.Bit                    as B
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
+import           System.IO      (hPutStrLn, hPutStr, Handle)
 
 import           Control.LVish
 import qualified Data.LVar.Set   as IS
@@ -155,11 +156,11 @@ instance Pretty a => Pretty (S.Set a) where
  pPrint s = pPrint (S.toList s)
  
 
-printDistMat :: V.Vector (U.Vector Int) -> IO () 
-printDistMat mat = do
-  putStrLn "Robinson-Foulds distance (matrix format):"
+printDistMat :: Handle -> V.Vector (U.Vector Int) -> IO () 
+printDistMat h mat = do
+  hPutStrLn h "Robinson-Foulds distance (matrix format):"
   V.forM_ mat $ \row -> do 
     U.forM_ row $ \elem -> do
-      putStr (show elem)
-      putStr " "
-    putStr "\n"          
+      hPutStr h (show elem)
+      hPutStr h " "
+    hPutStr h "\n"          

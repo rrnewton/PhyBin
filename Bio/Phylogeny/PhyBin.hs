@@ -29,7 +29,7 @@ import           Control.Concurrent  (Chan)
 import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
-import           System.IO           (openFile, hClose, IOMode(ReadMode))
+import           System.IO           (openFile, hClose, IOMode(..), stdout)
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
@@ -154,13 +154,18 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
                      -- putStrLn$ "Read trees! "++show (length trees)
                      -- putStrLn$ "Taxa: "++show (pPrint lbls)
                      -- putStrLn$ "First tree: "++show (displayDefaultTree (head trees))
-                     printDistMat mat
+                     printDistMat stdout mat
         writeFile (combine output_dir ("dendrogram.txt"))
                   (show$ fmap treename dendro)
         putStrLn "Wrote full dendrogram to file dendrogram.txt"
+        
 --           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs)) fullAvgTr
 --	   _ <- dotToPDF dot (base i size ++ ".pdf")
-        
+
+        hnd <- openFile  (combine output_dir ("distance_matrix.txt")) WriteMode
+        printDistMat hnd mat
+        hClose hnd
+
         case dist_thresh of
           Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
           Just dstThresh -> do
@@ -208,7 +213,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs,
       BinThem         -> outputBins binlist output_dir do_graph
       ClusterThem lnk -> outputClusters binlist output_dir do_graph
 
-    --putStrLn$ "Wrote representative tree to bin<N>_<binsize>.tr"
     putStrLn$ "Finished."
     --------------------------------------------------------------------------------
     -- End driver
