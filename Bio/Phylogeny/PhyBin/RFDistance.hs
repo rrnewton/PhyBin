@@ -366,7 +366,9 @@ consensusTree num_taxa (hd:tl) = bipsToTree num_taxa intersection
     intersection = loop (allBips hd) tl
     loop :: S.Set DenseLabelSet -> [NewickTree a] -> S.Set DenseLabelSet
     loop !remain []      = remain
-    loop !remain (hd:tl) = loop (foldBips S.delete hd remain) tl
+    -- Was attempting to use foldBips here as an optimization:
+--     loop !remain (hd:tl) = loop (foldBips S.delete hd remain) tl
+    loop !remain (hd:tl) = loop (S.difference remain (allBips hd)) tl    
       
 -- | Convert from bipartitions BACK to a single tree.
 bipsToTree :: Int -> S.Set DenseLabelSet -> NewickTree ()

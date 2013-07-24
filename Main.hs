@@ -401,25 +401,26 @@ t5_consensusTest = consensusTest "./tests/t5_consensus/cluster1_11_alltrees.tr"
 
 consensusTest :: String -> String -> IO ()
 consensusTest alltrees consensus = do  
-  (_,ftrees)  <- parseNewickFiles id [alltrees]
-  (_,[ctree]) <- parseNewickFiles id [consensus]
-  
+  (_,ctree:ftrees)  <- parseNewickFiles id [consensus,alltrees]
   let eachbips      = map (allBips . nwtree) ftrees
       totalBips     = foldl1' S.union        eachbips
-      intersectBips = foldl1' S.intersection eachbips  
+      intersectBips = foldl1' S.intersection eachbips
+      FullTree _ labs _ = ctree
+      linesPrnt x = unlines (map (("  "++) . dispBip labs) $ S.toList x)
   putStrLn$ "Bips in each: "++     show (map S.size eachbips)
   putStrLn$ "Total bips in all: "++show (S.size totalBips)  
   putStrLn$ "Bips in common: "++   show (S.size intersectBips)
-
+  putStrLn$ "Bips of first member:\n" ++ linesPrnt (head eachbips)
+  putStrLn$ "Some bips in the union that are NOT in the intersection:\n" ++
+     linesPrnt (S.fromList$ take 20$ S.toList$ S.difference totalBips intersectBips)
   let cbips = allBips $ nwtree ctree
-      FullTree _ labs _ = ctree
-  putStrLn$ "ConsensusBips ("++show (S.size cbips)++"):\n"
-            ++unlines (map (("  "++) . dispBip labs) $ S.toList cbips)
-            
+  putStrLn$ "ConsensusBips ("++show (S.size cbips)++"):\n"++linesPrnt cbips
+  putStrLn$"Things in the consensus that should NOT be:\n"++linesPrnt (S.difference cbips intersectBips)
+  putStrLn$"Things not in the consensus that SHOULD be:\n"++linesPrnt (S.difference intersectBips cbips) 
   putStrLn " Partial distance matrix WITHIN this cluster:"
   let (mat,_) = distanceMatrix (map nwtree ftrees)
   printDistMat stdout (V.take 30 mat)
-
+  HU.assertBool "Consensus should only include bips in the members" (S.isSubsetOf cbips totalBips)
   HU.assertEqual "Consensus tree matches intersected bips" cbips intersectBips 
   return ()
 
