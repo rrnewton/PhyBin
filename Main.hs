@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 
 module Main where
-import           Data.List (sort, intersperse)
+import           Data.List (sort, intersperse,foldl1')
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -16,6 +16,8 @@ import           System.IO             (stdout)
 import           Test.HUnit            (runTestTT, Test, test, (~:))
 
 import Control.Applicative ((<$>))
+import qualified Data.Vector                 as V
+
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
@@ -24,7 +26,7 @@ import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabL
                                        unitTests, acquireTreeFiles, deAnnotate)
 import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
-import Bio.Phylogeny.PhyBin.RFDistance (distanceMatrix, printDistMat, allBips, dispBip)
+import Bio.Phylogeny.PhyBin.RFDistance 
 import Bio.Phylogeny.PhyBin.PreProcessor
 
 import qualified Data.Clustering.Hierarchical as C
@@ -378,6 +380,28 @@ rftest = do
     let collapsed :: AnnotatedTree 
         collapsed = normalize$ annotateWLabLists tr
     in displayDefaultTree$ deAnnotate $  FullTree nm labs collapsed
+
+t3_consensusTest :: IO ()
+t3_consensusTest = do
+  (_,ftrees)  <- parseNewickFiles id ["./tests/t3_consensus/cluster1_215_alltrees.tr"]
+  (_,[ctree]) <- parseNewickFiles id ["./tests/t3_consensus/cluster1_215_consensus.tr"]
+  
+  let eachbips      = map (allBips . nwtree) ftrees
+      totalBips     = foldl1' S.union        eachbips
+      intersectBips = foldl1' S.intersection eachbips  
+  putStrLn$ "Bips in each: "++     show (map S.size eachbips)
+  putStrLn$ "Total bips in all: "++show (S.size totalBips)  
+  putStrLn$ "Bips in common: "++   show (S.size intersectBips)
+
+  let cbips = allBips $ nwtree ctree
+      FullTree _ labs _ = ctree
+  putStrLn$ "ConsensusBips ("++show (S.size cbips)++"):\n"
+            ++unlines (map (("  "++) . dispBip labs) $ S.toList cbips)
+            
+  putStrLn " Partial distance matrix WITHIN this cluster:"
+  let (mat,_) = distanceMatrix (map nwtree ftrees)
+  printDistMat stdout (V.take 30 mat)
+  return ()
 
 ----------------------------------------------------------------------------------------------------
 -- TODO: expose a command line argument for testing.

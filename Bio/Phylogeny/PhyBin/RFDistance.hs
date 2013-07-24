@@ -8,6 +8,10 @@ module Bio.Phylogeny.PhyBin.RFDistance
          -- * Bipartition (Bip) utilities
          allBips, foldBips, dispBip,
          consensusTree, bipsToTree,
+
+         -- * ADT for dense sets
+         mkSingleDense, mkEmptyDense, bipSize,
+         denseUnions, denseDiff, invertDense, dispBip, markLabel,
          
         -- * Methods for computing distance matrices
         distanceMatrix, hashRF, 
@@ -52,7 +56,7 @@ import           Debug.Trace
 -- I don't understand WHY, but I seem to get the same answers WITHOUT this.
 -- Normalization and symmetric difference do make things somewhat slower (e.g. 1.8
 -- seconds vs. 2.2 seconds for 150 taxa / 100 trees)
--- define NORMALIZATION
+#define NORMALIZATION
 -- define BITVEC_BIPS
 
 --------------------------------------------------------------------------------
@@ -104,8 +108,8 @@ denseUnions _size   = SI.unions
 bipSize             = SI.size
 denseDiff           = SI.difference
 
-dispBip labs bip = show$ map (labs M.!) $ 
-                         SI.toList bip
+dispBip labs bip = "[" ++ unwords strs ++ "]"
+  where strs = map (labs M.!) $ SI.toList bip
 invertDense size bip = loop SI.empty (size-1)
   where -- There's nothing for it but to iterate and test for membership:
     loop !acc ix | ix < 0           = acc
