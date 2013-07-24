@@ -157,7 +157,7 @@ distanceMatrix lst =
              in 
                if rem==0
                then q
-               else trace "Warning, when dividing symmetric difference by two, there was a remainder!"
+               else -- trace "Warning, when dividing symmetric difference by two, there was a remainder!"
                     q
 #            else
              in diff1
