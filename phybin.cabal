@@ -42,6 +42,10 @@ Source-repository head
   type:     git
   location: git://github.com/rrnewton/PhyBin.git
 
+Flag hashrf
+  description: Use the HashRF algorithm instead of the naive one.
+  default: False
+
 Library
   Exposed-modules:   Bio.Phylogeny.PhyBin
                      Bio.Phylogeny.PhyBin.RFDistance
@@ -65,6 +69,9 @@ Library
 --                     lattice-par, 
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
 
+  if flag(hashrf)
+     CPP-Options: -DUSE_HASHRF
+
 Executable phybin
   Main-is:           Main.hs
   Build-Depends:     phybin
@@ -82,3 +89,6 @@ Executable phybin
                      hierarchical-clustering >= 0.4
 --                     lattice-par, 
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
+
+  if flag(hashrf)
+     CPP-Options: -DUSE_HASHRF

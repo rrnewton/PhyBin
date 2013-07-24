@@ -250,10 +250,11 @@ doCluster num_taxa linkage validtrees = do
   putStrLn$ "Clustering using method "++show linkage
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees
-#if 1
-      (mat,eachbips) = distanceMatrix nwtrees
-#else
+#ifdef USE_HASHRF
+#warning "Using HashRF algorithm"
       mat            = hashRF num_taxa nwtrees
+#else
+      (mat,eachbips) = distanceMatrix nwtrees
 #endif
 
       ixtrees  = zip [0..] validtrees

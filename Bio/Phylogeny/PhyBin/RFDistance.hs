@@ -152,9 +152,13 @@ distanceMatrix lst =
              U.generate i  $ \ j ->
              let diff1 = S.size (S.difference (eachbips V.! i) (eachbips V.! j))
                  diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
-                 (q,0) = (diff1 + diff2) `quotRem` 2
+                 (q,rem) = (diff1 + diff2) `quotRem` 2
 #            ifdef NORMALIZATION          
-             in q
+             in 
+               if rem==0
+               then q
+               else trace "Warning, when dividing symmetric difference by two, there was a remainder!"
+                    q
 #            else
              in diff1
 #            endif
