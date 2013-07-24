@@ -13,6 +13,7 @@ import           Data.List          (elemIndex, isPrefixOf)
 import           Data.List.Split    (chunksOf)
 import           Data.Maybe         (fromJust)
 import           Data.Map           ((!))
+import qualified Data.Set           as S
 import           Data.Text.Lazy     (pack)
 import           Control.Monad      (void)
 import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
@@ -62,15 +63,14 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
 
 -- dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr (Either String String) Double
 dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr String Double
-dendrogramToGraph x = G.run_ G.empty $ void$ loop x
+dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
   where
- -- deEither (Left s)  = s
- -- deEither (Right s) = s
- loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (treename)
+
+ loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (drop prefChars treename)
  loop node@(C.Branch 0 left right) = do
    -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
    let lvs = collapseZeroes left ++ collapseZeroes right
-       nms = map treename lvs
+       nms = map ((drop prefChars) . treename) lvs
        lens = map length nms
        total = sum lens
        avg   = total `quot` length nms
@@ -95,6 +95,12 @@ dendrogramToGraph x = G.run_ G.empty $ void$ loop x
  collapseZeroes (C.Branch 0 l r) = collapseZeroes l ++ collapseZeroes r
  collapseZeroes oth = error "dendrogramToGraph: internal error.  Not expecting non-zero branch length here."
 
+ prefChars = length$ commonPrefix$ S.toList$ allNames orig
+
+ allNames (C.Leaf tr)      = S.singleton (treename tr)
+ allNames (C.Branch _ l r) = S.union (allNames l) (allNames r)
+
+ 
 
 -- | Open a GUI window to displaya tree.
 --
@@ -281,3 +287,13 @@ dotNewickTree_debug title atree@(FullTree _ tbl tree) = Gv.graphToDot myparams g
 -- TEMP / HACK:
 prettyPrint' :: Show a => a -> String
 prettyPrint' = show
+
+-- | Common prefix of a list of lists.
+commonPrefix :: Eq a => [[a]] -> [a]
+commonPrefix [] = []
+commonPrefix ls@(hd:tl)
+  | any null ls = []
+  | otherwise =
+    if   all ((== (head hd)) . head) tl
+    then head hd : commonPrefix (map tail ls)
+    else           commonPrefix (map tail ls)

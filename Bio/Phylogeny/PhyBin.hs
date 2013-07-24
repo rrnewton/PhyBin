@@ -206,7 +206,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 	      (unwords$ M.elems labelTab)
 --	      show (nest 2 $ sep $ map text $ M.elems labelTab)
 
-    putStrLn$ "Final number of tree bins: "++ show (M.size classes)
+--    putStrLn$ "Final number of tree bins: "++ show (M.size classes)
 
     unless (null warnings1 && null warnings2) $
 	writeFile (combine output_dir "WARNINGS.txt")
