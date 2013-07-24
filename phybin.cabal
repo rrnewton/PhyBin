@@ -65,7 +65,7 @@ Library
                      -- For bytestring.lazy support:
                      parsec >= 3.1.0, 
                      bitvec >= 0.1, vector >= 0.10,
-                     hierarchical-clustering >= 0.4
+                     hierarchical-clustering >= 0.4, split >= 0.2
 --                     lattice-par, 
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
 
@@ -86,7 +86,7 @@ Executable phybin
                      -- For bytestring.lazy support:
                      parsec >= 3.1.0, 
                      bitvec >= 0.1, vector >= 0.10,
-                     hierarchical-clustering >= 0.4
+                     hierarchical-clustering >= 0.4, split >= 0.2
 --                     lattice-par, 
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
 

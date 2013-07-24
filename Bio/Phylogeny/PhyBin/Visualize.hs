@@ -10,6 +10,7 @@ module Bio.Phylogeny.PhyBin.Visualize
        where
 import           Text.Printf        (printf)
 import           Data.List          (elemIndex, isPrefixOf)
+import           Data.List.Split    (chunksOf)
 import           Data.Maybe         (fromJust)
 import           Data.Map           ((!))
 import           Data.Text.Lazy     (pack)
@@ -66,15 +67,33 @@ dendrogramToGraph x = G.run_ G.empty $ void$ loop x
  -- deEither (Left s)  = s
  -- deEither (Right s) = s
  loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (treename)
+ loop node@(C.Branch 0 left right) = do
+   -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
+   let lvs = collapseZeroes left ++ collapseZeroes right
+       nms = map treename lvs
+       lens = map length nms
+       total = sum lens
+       avg   = total `quot` length nms
+       -- The goal here is to make an approximately square arrangement:
+       -- goal: avg * perline == total / (avg * perline)
+       perline = ceiling$ sqrt (fromIntegral total / ((fromIntegral avg)^2))
+       chunked = chunksOf perline nms
+       name = unlines (map unwords chunked)
+   G.insMapNodeM name
  loop node@(C.Branch dist left right) =
     do (_,l) <- loop left
        (_,r) <- loop right
+       -- Interior nodes do NOT have their names drawn:
        let ndname = "DUMMY_"++(l++"_"++r)
                     -- Right (deEither l ++"_"++ deEither r)
        (midN,mid) <- G.insMapNodeM ndname
        G.insMapEdgeM (l, mid, dist)
        G.insMapEdgeM (r, mid, dist)
        return (midN,mid)
+
+ collapseZeroes (C.Leaf tr)      = [tr]
+ collapseZeroes (C.Branch 0 l r) = collapseZeroes l ++ collapseZeroes r
+ collapseZeroes oth = error "dendrogramToGraph: internal error.  Not expecting non-zero branch length here."
 
 
 -- | Open a GUI window to displaya tree.
@@ -176,13 +195,13 @@ dotDendrogram title edge_scale dendro =
                               }
 --  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
   nodeAttrs :: (Int, String) -> [GA.Attribute]
-  nodeAttrs (_num, eith) =
+  nodeAttrs (_num, str) =
     let (tag,shp) = -- case eith of
           -- Left treename -> (take 60 treename, GA.Ellipse)
           -- Right _       -> ("", GA.PointShape)
-          if isPrefixOf "DUMMY_" eith
+          if isPrefixOf "DUMMY_" str
           then ("", GA.PointShape)          
-          else (take 60 eith, GA.Ellipse)
+          else (str, GA.Ellipse)
     in 
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
