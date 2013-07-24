@@ -246,7 +246,7 @@ type TreeID = AnnotatedTree
 hashRF :: Int -> [NewickTree a] -> DistanceMatrix
 hashRF num_taxa trees = build M.empty (zip [0..] trees)
   where
-    total::Int = error "FINISHME"
+    num_trees = length trees
     -- First build the table:
     build acc [] = ingest acc
     build acc ((ix,hd):tl) =
@@ -254,7 +254,7 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
           acc' = S.foldl' fn acc bips
           fn acc bip = M.alter fn2 bip acc
           fn2 (Just membs) = Just (markLabel ix membs)
-          fn2 Nothing      = Just (mkSingleDense total ix)
+          fn2 Nothing      = Just (mkSingleDense num_taxa ix)
       in      
       build acc' tl
 
@@ -265,21 +265,21 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
        theST :: forall s0 . ST s0 DistanceMatrix
        theST = do 
         -- Triangular matrix, starting narrow and widening:
-        matr <- MV.new total 
+        matr <- MV.new num_trees
         -- Too bad MV.replicateM is insufficient.  It should pass index.  
         -- Instead we write this C-style:
-        for_ (0,total) $ \ ix -> do 
+        for_ (0,num_trees) $ \ ix -> do 
           row <- MU.replicate ix (0::Int)
           MV.write matr ix row
           return ()
 
-        unsafeIOToST$ putStrLn$" Built matrix for dim "++show total
+        unsafeIOToST$ putStrLn$" Built matrix for dim "++show num_trees
 
         let bumpMatr i j | j < i     = incr i j
                          | otherwise = incr j i
             incr :: Int -> Int -> ST s0 ()
             incr i j = do -- Not concurrency safe yet:
-                          unsafeIOToST$ putStrLn$" Reading at position "++show(i,j)
+--                          unsafeIOToST$ putStrLn$" Reading at position "++show(i,j)
                           row <- MV.read matr i
                           elm <- MU.read row j
                           MU.write row j (elm+1)
@@ -292,11 +292,11 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
               let haveIt   = bipMembs
                   -- Depending on how invertDense is written, it could be useful to
                   -- fuse this in and deforest "dontHave".
-                  dontHave = invertDense num_taxa bipMembs
+                  dontHave = invertDense num_trees bipMembs
                   fn1 trId = traverseDense_ (fn2 trId) dontHave
                   fn2 trId1 trId2 = bumpMatr trId1 trId2
               in
-                 trace ("Computed donthave "++ show dontHave) $ 
+--                 trace ("Computed donthave "++ show dontHave) $ 
                  traverseDense_ fn1 haveIt
         F.traverse_ fn bipTable
         v1 <- V.unsafeFreeze matr

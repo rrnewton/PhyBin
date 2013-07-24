@@ -161,12 +161,15 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                   (show$ fmap treename dendro)
         putStrLn "Wrote full dendrogram to file dendrogram.txt"
 
-        gvizAsync <- async $ do
-          t0 <- getCurrentTime
-          let dot = dotDendrogram "dendrogram" 1.0 dendro
-          _ <- dotToPDF dot (combine output_dir "dendrogram.pdf")
-          t1 <- getCurrentTime          
-          putStrLn$ "Wrote dendrogram diagram to file dendrogram.pdf ("++show(diffUTCTime t1 t0)++")"
+        gvizAsync <- if do_graph
+                     then async (do 
+                       t0 <- getCurrentTime
+                       let dot = dotDendrogram "dendrogram" 1.0 dendro
+                       _ <- dotToPDF dot (combine output_dir "dendrogram.pdf")
+                       t1 <- getCurrentTime          
+                       putStrLn$ " [finished] Wrote dendrogram diagram to file dendrogram.pdf ("
+                                 ++show(diffUTCTime t1 t0)++")")
+                     else async (return ())
 
         hnd <- openFile  (combine output_dir ("distance_matrix.txt")) WriteMode
         printDistMat hnd mat
@@ -218,13 +221,13 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                                  "Wrong number of taxa ("++ show n ++"): "++ file++"\n")
 		           warnings2))
 
-    case clust_mode of
-      BinThem         -> outputBins binlist output_dir do_graph
-      ClusterThem lnk -> outputClusters num_taxa binlist output_dir do_graph
+    async2 <- case clust_mode of
+                BinThem         -> outputBins binlist output_dir do_graph
+                ClusterThem lnk -> outputClusters num_taxa binlist output_dir do_graph
 
     -- Wait on parallel tasks:
     putStrLn$ "Waiting for asynchronous tasks to finish..."
-    mapM_ wait asyncs 
+    mapM_ wait (async2:asyncs)
     putStrLn$ "Finished."
     --------------------------------------------------------------------------------
     -- End driver
@@ -316,7 +319,7 @@ sliceDendro dstThresh den = loop den
 --------------------------------------------------------------------------------
 
 -- outputClusters :: (Num a1, Ord a1, Show a1) => Int -> [(a1, t, OneCluster a)] -> String -> Bool -> IO ()
-outputClusters :: Int -> [(Int, OneCluster a)] -> String -> Bool -> IO ()
+outputClusters :: Int -> [(Int, OneCluster a)] -> String -> Bool -> IO (Async ())
 outputClusters num_taxa binlist output_dir do_graph = do
     let numbins = length binlist
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
@@ -332,20 +335,22 @@ outputClusters num_taxa binlist output_dir do_graph = do
        writeFile (base i size ++"_alltrees.tr")
            (unlines [ show (displayStrippedTree ft) | ft <- ftrees ])
 
-    putStrLn$ "[finished] Wrote contents of each cluster to cluster<N>_<size>.txt"
-    putStrLn$ "           Wrote representative (consensus) trees to cluster<N>_<size>_consensus.tr"
-    when (do_graph) $ do
-      putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip3 [1::Int ..] binlist consTrs) $ \ (i, (size, OneCluster membs), fullConsTr) -> do
+    putStrLn$ " [finished] Wrote contents of each cluster to cluster<N>_<size>.txt"
+    putStrLn$ "            Wrote representative (consensus) trees to cluster<N>_<size>_consensus.tr"
+    if do_graph then do
+      putStrLn$ "Next start the time consuming operation of writing out graphviz visualizations:"
+      asyncs <- forM (zip3 [1::Int ..] binlist consTrs) $
+                \ (i, (size, OneCluster membs), fullConsTr) -> async$ do
     	 when (size > 1 || numbins < 100) $ do
            let dot = dotNewickTree ("cluster #"++ show i) 1.0 fullConsTr
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
 	   return ()
-      putStrLn$ "[finished] Wrote visual representations of trees to "++filePrefix++"<N>_<size>.pdf"
+      async $ do
+        mapM_ wait asyncs
+        putStrLn$ " [finished] Wrote visual representations of consensus trees to "++filePrefix++"<N>_<size>.pdf"
+     else async (return ())
 
-    return ()
-
-outputBins :: [(Int, OneCluster StandardDecor)] -> String -> Bool -> IO ()
+outputBins :: [(Int, OneCluster StandardDecor)] -> String -> Bool -> IO (Async ())
 outputBins binlist output_dir  do_graph = do
     let numbins = length binlist
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
@@ -359,25 +364,26 @@ outputBins binlist output_dir  do_graph = do
        -- Printing the average tree instead of the stripped cannonical one:         
        writeFile   (base i size ++"_avg.tr")  (show (displayDefaultTree$ deAnnotate fullAvgTr) ++ "\n") -- FIXME
 
-    putStrLn$ "[finished] Wrote contents of each bin to "++filePrefix++"<N>_<binsize>.txt"
-    putStrLn$ "           Wrote representative trees to "++filePrefix++"<N>_<binsize>_avg.tr" 
-    when (do_graph) $ do
-      putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, OneCluster membs), avgTree) -> do
-         let FullTree fstName labs _ = head membs
-             fullAvgTr = FullTree fstName labs avgTree 
-    	 when (size > 1 || numbins < 100) $ do 
-           let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs))
-                                   --(annotateWLabLists$ fmap (const 0) tr)
-                                   -- TEMP FIXME -- using just ONE representative tree:
-                                   ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
-                                     --(head$ trees bentry) 
- 				    fullAvgTr)
-	   _ <- dotToPDF dot (base i size ++ ".pdf")
-	   return ()
-      putStrLn$ "[finished] Wrote visual representations of trees to bin<N>_<binsize>.pdf"
-
-
+    putStrLn$ " [finished] Wrote contents of each bin to "++filePrefix++"<N>_<binsize>.txt"
+    putStrLn$ "            Wrote representative trees to "++filePrefix++"<N>_<binsize>_avg.tr" 
+    if do_graph then do
+       putStrLn$ "Next start the time consuming operation of writing out graphviz visualizations:"
+       asyncs <- forM (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, OneCluster membs), avgTree) -> async $ do
+          let FullTree fstName labs _ = head membs
+              fullAvgTr = FullTree fstName labs avgTree 
+          when (size > 1 || numbins < 100) $ do 
+            let dot = dotNewickTree ("cluster #"++ show i) (1.0 / avg_branchlen (map nwtree membs))
+                                    --(annotateWLabLists$ fmap (const 0) tr)
+                                    -- TEMP FIXME -- using just ONE representative tree:
+                                    ( --trace ("WEIGHTED: "++ show (head$ trees bentry)) $ 
+                                      --(head$ trees bentry) 
+                                     fullAvgTr)
+            _ <- dotToPDF dot (base i size ++ ".pdf")
+            return ()
+       async $ do
+         mapM_ wait asyncs
+         putStrLn$ " [finished] Wrote visual representations of trees to "++filePrefix++"<N>_<size>.pdf"
+     else async (return ())
 --------------------------------------------------------------------------------
 
 -- Monadic mapAccum

@@ -97,9 +97,9 @@ options =
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
-     , Option ['g']     ["graphbins"] (NoArg Graph)  "use graphviz to produce .dot and .pdf output files named cluster1.*, cluster2.*, etc"
+     , Option ['g']     ["graphbins"] (NoArg Graph)  "use graphviz to produce .dot and .pdf output files"
 -- TODO: Produce the consensus tree as well as the individual trees.
-     , Option ['d']     ["drawbins"]  (NoArg Draw)   "like -g, but open GUI windows to show a tree for each bin"
+     , Option ['d']     ["drawbins"]  (NoArg Draw)   "like -g, but open GUI windows to show each bin's tree"
 
      , Option ['w']     ["view"]    (NoArg View)$  "for convenience, \"view mode\" simply displays input Newick files without binning" 
 
