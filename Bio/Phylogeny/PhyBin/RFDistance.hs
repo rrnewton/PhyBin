@@ -1,20 +1,26 @@
-{-# LANGUAGE ScopedTypeVariables, CPP #-}
+{-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
 
 module Bio.Phylogeny.PhyBin.RFDistance
        (DenseLabelSet, DistanceMatrix, 
-        allBips, foldBips, dispBip, 
-        distanceMatrix, printDistMat)
+        allBips, foldBips, dispBip,
+
+        distanceMatrix, hashRF, 
+
+        printDistMat)
        where
 
 import           Control.Monad
+import           Control.Monad.ST
 import           Data.Word
 import qualified Data.Vector                 as V
-import qualified Data.Vector.Unboxed.Mutable as MV
+import qualified Data.Vector.Mutable         as MV
+import qualified Data.Vector.Unboxed.Mutable as MU
 import qualified Data.Vector.Unboxed         as U
 import qualified Data.Vector.Unboxed.Bit     as UB
 import qualified Data.Bit                    as B
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
+import           System.IO.Unsafe
 
 -- import           Control.LVish
 -- import qualified Data.LVar.Set   as IS
@@ -26,16 +32,27 @@ import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 -- import           Data.BitList
 import qualified Data.Set as S
+import qualified Data.List as L
 import qualified Data.IntSet as SI
 import qualified Data.Map.Strict as M
 import qualified Data.Foldable as F
+import qualified Data.Traversable as T
 import           Data.Monoid
 import           Prelude as P
 import           Debug.Trace
 
+-- I don't understand WHY, but I seem to get the same answers without this:
+-- Normalization and symmetric difference do make things somewhat slower (e.g. 1.8
+-- seconds vs. 2.2 seconds)
+#define NORMALIZATION
+-- define BITVEC_BIPS
+
 --------------------------------------------------------------------------------
 -- A data structure choice
 --------------------------------------------------------------------------------
+
+-- type DenseLabelSet s = BitList
+
 
 -- | Dense sets of taxa, aka Bipartitions or BiPs
 --   We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N).
@@ -49,19 +66,27 @@ import           Debug.Trace
 -- 
 --   A set that is more than a majority of the taxa can be normalized by "flipping",
 --   i.e. taking the taxa that are NOT in that set.
-#if 0
--- type DenseLabelSet s = BitList
+#ifdef BITVEC_BIPS
+
+#  if 1
 type DenseLabelSet = UB.Vector B.Bit
-markLabel lab = UB.modify (\vec -> MV.write vec lab (B.fromBool True)) 
+markLabel lab = UB.modify (\vec -> MU.write vec lab (B.fromBool True)) 
 mkEmptyDense  size = UB.replicate size (B.fromBool False)
 mkSingleDense size ind = markLabel ind (mkEmptyDense size)
 denseUnions        = UB.unions
-bipSize            = U.length
+bipSize            = UB.countBits
 denseDiff          = UB.difference
-
+invertDense size bip = UB.invert bip
 dispBip labs bip = show$ map (\(ix,_) -> (labs M.! ix)) $
                         filter (\(_,bit) -> B.toBool bit) $
                         zip [0..] (UB.toList bip)
+#  else
+-- TODO: try tracking the size:
+data DenseLabelSet = DLS {-# UNPACK #-} !Int (UB.Vector B.Bit)
+markLabel lab (DLS _ vec)= DLS (UB.modify (\vec -> return (MU.write vec lab (B.fromBool True))) ) vec
+-- ....
+#  endif
+
 #else
 type DenseLabelSet = SI.IntSet
 markLabel lab set   = SI.insert lab set 
@@ -73,21 +98,35 @@ denseDiff           = SI.difference
 
 dispBip labs bip = show$ map (labs M.!) $ 
                          SI.toList bip
+invertDense size bip = loop SI.empty (size-1)
+  where -- There's nothing for it but to iterate and test for membership:
+    loop !acc ix | ix < 0           = acc
+                 | SI.member ix bip = loop acc (ix-1)
+                 | otherwise        = loop (SI.insert ix acc) (ix-1)
+traverseDense_ fn bip =
+  -- FIXME: need guaranteed non-allocating way to do this.
+  SI.foldr' (\ix acc ->  fn ix >> acc) (return ()) bip
+
 #endif
 
 markLabel    :: Label -> DenseLabelSet -> DenseLabelSet
 mkEmptyDense :: Int -> DenseLabelSet
+mkSingleDense :: Int -> Label -> DenseLabelSet
 denseUnions  :: Int -> [DenseLabelSet] -> DenseLabelSet
 bipSize      :: DenseLabelSet -> Int
 
 -- | Print a BiPartition in a pretty form
 dispBip      :: LabelTable -> DenseLabelSet -> String
 
+-- | Assume that total taxa are 0..N-1, invert membership:
+invertDense  :: Int -> DenseLabelSet -> DenseLabelSet
+
+traverseDense_ :: Monad m => (Int -> m ()) -> DenseLabelSet -> m ()
+
+
 --------------------------------------------------------------------------------
 -- Dirt-simple reference implementation
 --------------------------------------------------------------------------------
-
--- define NORMALIZATION
 
 type DistanceMatrix = V.Vector (U.Vector Int)
 
@@ -113,7 +152,7 @@ labelBips :: NewickTree a -> NewickTree (a, [DenseLabelSet])
 labelBips tr =
 --    trace ("labelbips "++show allLeaves++" "++show size) $
 #ifdef NORMALIZATION  
-    fmap (\(a,ls) -> (a,map (normBip allLeaves) ls)) $
+    fmap (\(a,ls) -> (a,map (normBip size) ls)) $
 #endif
     loop tr
   where    
@@ -129,11 +168,14 @@ labelBips tr =
     leafSet (NTLeaf _ lab)    = mkSingleDense size lab
     leafSet (NTInterior _ ls) = denseUnions size $ map leafSet ls
 
-normBip :: DenseLabelSet -> DenseLabelSet -> DenseLabelSet
-normBip allLeaves bip =
-  let size     = bipSize allLeaves
-      halfSize = size `quot` 2
-      flipped  = denseDiff allLeaves bip
+-- normBip :: DenseLabelSet -> DenseLabelSet -> DenseLabelSet
+--    normBip allLeaves bip =
+normBip :: Int -> DenseLabelSet -> DenseLabelSet    
+normBip totsize bip =
+  let -- size     = bipSize allLeaves
+      halfSize = totsize `quot` 2
+--      flipped  = denseDiff allLeaves bip
+      flipped  = invertDense totsize bip 
   in 
   case compare (bipSize bip) halfSize of
     LT -> bip 
@@ -176,6 +218,67 @@ type TreeID = AnnotatedTree
 -- type DistanceMat s = NA.NatArray s Word32
 -- Except... bump isn't supported by our idempotent impl.
 
+-- | This version slices the problem a different way.  A single pass over the trees
+-- populates the table of bipartitions.  Then the table can be processed (locally) to
+-- produce (non-localized) increments to a distance matrix.
+hashRF :: Int -> [NewickTree a] -> DistanceMatrix
+hashRF num_taxa trees = build M.empty (zip [0..] trees)
+  where
+    total = length trees
+    -- First build the table:
+    build acc [] = ingest acc
+    build acc ((ix,hd):tl) =
+      let bips = allBips hd
+          acc' = S.foldl' fn acc bips
+          fn acc bip = M.alter fn2 bip acc
+          fn2 (Just membs) = Just (markLabel ix membs)
+          fn2 Nothing      = Just (mkSingleDense total ix)
+      in      
+      build acc' tl
+
+    -- Second, ingest the table to construct the distance matrix:
+    ingest :: M.Map DenseLabelSet DenseLabelSet -> DistanceMatrix
+    ingest bipTable = runST theST
+      where
+       theST :: forall s0 . ST s0 DistanceMatrix
+       theST = do 
+        -- Triangular matrix, starting narrow and widening:
+        matr <- MV.new total 
+        -- Too bad MV.replicateM is insufficient.  It should pass index.  
+        -- Instead we write this C-style:
+        for_ (0,total) $ \ ix -> do 
+          row <- MU.replicate ix (0::Int)
+          MV.write matr ix row
+          return ()
+
+        let bumpMatr i j | j < i     = incr i j
+                         | otherwise = incr j i
+            incr :: Int -> Int -> ST s0 ()
+            incr i j = do -- Not concurrency safe yet:
+                          row <- MV.read matr i
+                          elm <- MU.read row j
+                          MU.write row j (elm+1)
+                          return ()
+            fn bipMembs =
+              -- Here we quadratically consider all pairs of trees and ask whether
+              -- their edit distance is increased based on this particular BiP.
+              -- Actually, as an optimization, it is sufficient to consider only the
+              -- cartesian product of those that have and those that don't.
+              let haveIt   = bipMembs
+                  -- Depending on how invertDense is written, it could be useful to
+                  -- fuse this in and deforest "dontHave".
+                  dontHave = invertDense num_taxa bipMembs
+                  fn1 trId = traverseDense_ (fn2 trId) dontHave
+                  fn2 trId1 trId2 = bumpMatr trId1 trId2
+              in
+                 trace ("Computed donthave "++ show dontHave) $ 
+                 traverseDense_ fn1 haveIt
+        F.traverse_ fn bipTable
+        v1 <- V.unsafeFreeze matr
+        T.traverse U.unsafeFreeze v1
+
+
+
 #if 0
 -- | Returns a (square) distance matrix encoded as a vector.
 distanceMatrix :: [AnnotatedTree] -> IO (U.Vector Word)
@@ -184,7 +287,7 @@ distanceMatrix lst = do
 --   IM.IMapSnap (table :: M.Map DenseLabelSet (Snapshot IS.ISet TreeID)) <- runParThenFreeze par
    IM.IMapSnap table <- runParThenFreeze par
    let sz = P.length lst
-   v <- MV.replicate (sz*sz) (0::Word)
+   v <- MU.replicate (sz*sz) (0::Word)
    let fn set () =
          
    F.foldrM 
@@ -223,3 +326,14 @@ printDistMat h mat = do
       hPutStr h " "
     hPutStr h "0\n"          
   hPutStrLn h "-----------------------------------------"
+
+-- My own forM for numeric ranges (not requiring deforestation optimizations).
+-- Inclusive start, exclusive end.
+{-# INLINE for_ #-}
+for_ :: Monad m => (Int, Int) -> (Int -> m ()) -> m ()
+for_ (start, end) _fn | start > end = error "for_: start is greater than end"
+for_ (start, end) fn = loop start
+  where
+   loop !i | i == end  = return ()
+           | otherwise = do fn i; loop (i+1)
+  

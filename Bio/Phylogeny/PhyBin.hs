@@ -155,7 +155,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                                           M.toList x
                             return (x,binlist,[])
       ClusterThem lnk -> do
-        (mat, dendro) <- doCluster lnk validtrees        
+        (mat, dendro) <- doCluster num_taxa lnk validtrees        
         case print_rfmatrix of
           False -> return ()
           True -> do -- treeFiles <- acquireTreeFiles files
@@ -257,12 +257,13 @@ doBins validtrees = do
 	          binthem validtrees
     return (classes)
 
-doCluster :: C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
-doCluster linkage validtrees = do
+doCluster :: Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
+doCluster num_taxa linkage validtrees = do
   putStrLn$ "Clustering using method "++show linkage
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees 
-      mat      = distanceMatrix nwtrees
+--      mat      = distanceMatrix nwtrees
+      mat      = hashRF num_taxa nwtrees
       ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
 --                         | i == numtrees-1 = 0 
@@ -278,7 +279,7 @@ doCluster linkage validtrees = do
 reportClusts mode binlist = do 
     let 
         taxa :: S.Set Int
-	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist
+	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist -- Expensive!?
         binsizes = map fst3 binlist
 
     putStrLn$ " Outcome: "++show (length binlist)++" clusters found, "++show (length$ takeWhile (>1) binsizes)

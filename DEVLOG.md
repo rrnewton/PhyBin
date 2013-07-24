@@ -101,3 +101,18 @@ In fact, the RFDistance is three, which is probably right.
 [2013.07.23] {Updating set reps, timing}
 ----------------------------------------
 
+Ok, went ahead and switched over to unboxed bitvectors for
+DenseLabelSet.  It's 10X slower!
+
+The BITVEC_BIPS option is getting the right answer now though.
+Apparently the normalization bug just fixed was the only bug.
+
+For 100 trees, 150 taxa (from the hashrf suite):
+
+  * IntSet takes 2.2s, 7.2G alloc, 114M copied.
+  * bit vec takes 21s and 69G alloc, 264M copied.
+  
+Productivities are high in both cases.
+
+Oops... there was a bug in bipSize.  I'm surprised it was getting the
+right answer.  Fixing that brought it down to 39G alloc, 12.3s.
