@@ -12,7 +12,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          ClustMode(..), TreeName,
          
          -- * Tree operations
-         displayDefaultTree,
+         displayDefaultTree, displayStrippedTree, 
          treeSize, numLeaves, liftFT,
          get_dec, set_dec, get_children, 
          map_labels, all_labels, foldIsomorphicTrees,
@@ -114,6 +114,13 @@ displayDefaultTree orig = loop tr <> ";"
          Just val -> base <> text ":[" <> text (show val) <> text "]"
       where base = parens$ sep$ map_but_last (<>text",") $ map loop ls
 
+displayStrippedTree :: FullTree a -> Doc
+displayStrippedTree orig = loop tr <> ";"
+  where
+    (FullTree _ mp tr) = orig -- normalize orig
+    loop (NTLeaf _ name) = text (mp M.! name)
+    loop (NTInterior _ ls) = parens$ sep$ map_but_last (<>text",") $ map loop ls
+
 ----------------------------------------------------------------------------------------------------
 -- Labels
 ----------------------------------------------------------------------------------------------------
@@ -214,7 +221,7 @@ data PhyBinConfig =
 default_phybin_config :: PhyBinConfig
 default_phybin_config = 
  PBC { verbose = False
-      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually.)"
+      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually with -n.)"
       , name_hack = id -- Default, no transformation of leaf-labels
       , output_dir = "./phybin_out/"
       , inputs = []

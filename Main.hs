@@ -370,7 +370,7 @@ rftest = do
   putStrLn$ "13  collapsed 0.03: " ++show (disp$ liftFT (collapseBranchLenThresh 0.03) t1)
   putStrLn$ "112 collapsed 0.03: " ++show (disp$ liftFT (collapseBranchLenThresh 0.03) t2)  
 
-  let mat = distanceMatrix [nwtree t1, nwtree t2]
+  let (mat,_) = distanceMatrix [nwtree t1, nwtree t2]
   printDistMat stdout mat
   return ()
  where

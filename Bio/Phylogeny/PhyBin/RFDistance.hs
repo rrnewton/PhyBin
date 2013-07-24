@@ -1,16 +1,24 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
 
 module Bio.Phylogeny.PhyBin.RFDistance
-       (DenseLabelSet, DistanceMatrix, 
-        allBips, foldBips, dispBip,
+       (
+         -- * Types
+         DenseLabelSet, DistanceMatrix,
 
+         -- * Bipartition (Bip) utilities
+         allBips, foldBips, dispBip,
+         consensusTree, bipsToTree,
+         
+        -- * Methods for computing distance matrices
         distanceMatrix, hashRF, 
 
+        -- * Output
         printDistMat)
        where
 
 import           Control.Monad
 import           Control.Monad.ST
+import           Data.Function       (on)
 import           Data.Word
 import qualified Data.Vector                 as V
 import qualified Data.Vector.Mutable         as MV
@@ -41,10 +49,10 @@ import           Data.Monoid
 import           Prelude as P
 import           Debug.Trace
 
--- I don't understand WHY, but I seem to get the same answers without this:
+-- I don't understand WHY, but I seem to get the same answers WITHOUT this.
 -- Normalization and symmetric difference do make things somewhat slower (e.g. 1.8
--- seconds vs. 2.2 seconds)
-#define NORMALIZATION
+-- seconds vs. 2.2 seconds for 150 taxa / 100 trees)
+-- define NORMALIZATION
 -- define BITVEC_BIPS
 
 --------------------------------------------------------------------------------
@@ -131,21 +139,23 @@ traverseDense_ :: Monad m => (Int -> m ()) -> DenseLabelSet -> m ()
 type DistanceMatrix = V.Vector (U.Vector Int)
 
 -- | Returns a triangular distance matrix encoded as a vector.
-distanceMatrix :: [NewickTree a] -> DistanceMatrix
+--   Also return the set-of-BIPs representation for each tree.
+distanceMatrix :: [NewickTree a] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
 distanceMatrix lst = 
    let sz = P.length lst
        eachbips = V.fromList $ map allBips lst
---   in V.generate (sz-1) $ \ i ->
-   in V.generate sz $ \ i ->        
-      U.generate i  $ \ j ->
-      let diff1 = S.size (S.difference (eachbips V.! i) (eachbips V.! j))
-          diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
-          (q,0) = (diff1 + diff2) `quotRem` 2
-#ifdef NORMALIZATION          
-      in q 
-#else
-      in diff1
-#endif
+       mat = V.generate sz $ \ i ->        
+             U.generate i  $ \ j ->
+             let diff1 = S.size (S.difference (eachbips V.! i) (eachbips V.! j))
+                 diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
+                 (q,0) = (diff1 + diff2) `quotRem` 2
+#            ifdef NORMALIZATION          
+             in q
+#            else
+             in diff1
+#            endif
+   in (mat, eachbips)
+
 -- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
 -- each interior node carries a list of BiPs the same length as its list of children.
 labelBips :: NewickTree a -> NewickTree (a, [DenseLabelSet])
@@ -196,6 +206,7 @@ allBips tr = S.filter ((> 1) . bipSize) $ foldBips S.insert tr S.empty
 --------------------------------------------------------------------------------
 -- First, necessary types:
 
+-- UNFINISHED:
 #if 0
 -- | A collection of all observed bipartitons (bips) with a mapping of which trees
 -- contain which Bips.
@@ -212,6 +223,9 @@ type TreeID = AnnotatedTree
 -- | Tree's are identified simply by their order within the list of input trees.
 -- type TreeID = Int
 #endif
+
+--------------------------------------------------------------------------------
+-- Alternate way of slicing the problem: HashRF
 --------------------------------------------------------------------------------
 
 -- The distance matrix is an atomically-bumped matrix of numbers.
@@ -311,6 +325,8 @@ insertBips table tree = do
 #endif
 
 --------------------------------------------------------------------------------
+-- Miscellaneous Helpers
+--------------------------------------------------------------------------------
 
 instance Pretty a => Pretty (S.Set a) where
  pPrint s = pPrint (S.toList s)
@@ -337,3 +353,45 @@ for_ (start, end) fn = loop start
    loop !i | i == end  = return ()
            | otherwise = do fn i; loop (i+1)
   
+
+-- | Take only the bipartitions that are agreed on by all trees.
+consensusTree :: Int -> [NewickTree a] -> NewickTree ()
+consensusTree _ [] = error "Cannot take the consensusTree of the empty list"
+consensusTree num_taxa (hd:tl) = bipsToTree num_taxa intersection
+  where
+    intersection = loop (allBips hd) tl
+    loop :: S.Set DenseLabelSet -> [NewickTree a] -> S.Set DenseLabelSet
+    loop !remain []      = remain
+    loop !remain (hd:tl) = loop (foldBips S.delete hd remain) tl
+      
+-- | Convert from bipartitions BACK to a single tree.
+bipsToTree :: Int -> S.Set DenseLabelSet -> NewickTree ()
+bipsToTree num_taxa bip =
+  loop lvl0 sorted
+  where
+    -- We consider each subset in increasing size order.
+    -- FIXME: If we tweak the order on BIPs, then we can just use S.toAscList here:
+    sorted = L.sortBy (compare `on` bipSize) (S.toList bip)
+
+    lvl0 = [ (mkSingleDense num_taxa ix, NTLeaf () ix)
+           | ix <- [0..num_taxa-1] ]
+
+    -- We recursively glom together subtrees until we have a complete tree.
+    -- We only process larger subtrees after we have processed all the smaller ones.
+    loop !subtrees [] =
+      case subtrees of
+        []    -> error "bipsToTree: internal error"
+        [(_,one)] -> one
+        lst   -> NTInterior () (map snd lst)
+    loop !subtrees (bip:tl) =
+      let (in_,out) = L.partition ((`SI.isSubsetOf` bip) . fst) subtrees in
+      -- Here all subtrees that match the current bip get merged:
+      loop ((denseUnions num_taxa (map fst in_),
+             NTInterior ()        (map snd in_)) : out) tl
+
+    -- sizeChop [] = []
+    -- sizeChop (hd:tl) =
+    --   let sz        = bipSize hd 
+    --       (ths,rst) = span ((sz ==) . bipSize) tl
+    --   in (hd:ths) : sizeChop rst
+
