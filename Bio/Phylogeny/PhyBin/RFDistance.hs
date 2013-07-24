@@ -242,7 +242,7 @@ type TreeID = AnnotatedTree
 hashRF :: Int -> [NewickTree a] -> DistanceMatrix
 hashRF num_taxa trees = build M.empty (zip [0..] trees)
   where
-    total = length trees
+    total::Int = error "FINISHME"
     -- First build the table:
     build acc [] = ingest acc
     build acc ((ix,hd):tl) =
@@ -269,10 +269,13 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
           MV.write matr ix row
           return ()
 
+        unsafeIOToST$ putStrLn$" Built matrix for dim "++show total
+
         let bumpMatr i j | j < i     = incr i j
                          | otherwise = incr j i
             incr :: Int -> Int -> ST s0 ()
             incr i j = do -- Not concurrency safe yet:
+                          unsafeIOToST$ putStrLn$" Reading at position "++show(i,j)
                           row <- MV.read matr i
                           elm <- MU.read row j
                           MU.write row j (elm+1)

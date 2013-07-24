@@ -199,8 +199,9 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
 
-    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n"++ 
-	      show (nest 2 $ sep $ map text $ M.elems labelTab)
+    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++
+	      (unwords$ M.elems labelTab)
+--	      show (nest 2 $ sep $ map text $ M.elems labelTab)
 
     putStrLn$ "Final number of tree bins: "++ show (M.size classes)
 
@@ -248,9 +249,13 @@ doCluster :: Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogra
 doCluster num_taxa linkage validtrees = do
   putStrLn$ "Clustering using method "++show linkage
   let nwtrees  = map nwtree validtrees
-      numtrees = length validtrees 
+      numtrees = length validtrees
+#if 1
       (mat,eachbips) = distanceMatrix nwtrees
---      mat      = hashRF num_taxa nwtrees
+#else
+      mat            = hashRF num_taxa nwtrees
+#endif
+
       ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
 --                         | i == numtrees-1 = 0 
