@@ -203,7 +203,8 @@ prob1 = "(5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13);"
 -- the unnormalized one.
 testNorm :: String -> IO ()
 testNorm str = do
-  let (labs,parsed) = parseNewick M.empty id "test" (B.pack str)
+  let (labs,parseds) = parseNewick M.empty id "test" (B.pack str)
+      parsed = head parseds
       normed = normalize $ annotateWLabLists parsed
       bips1  = allBips parsed
       bips2  = allBips normed
@@ -316,7 +317,7 @@ view_graphs PBC{..} =
 		str <- B.readFile file
 		putStrLn$ "Parsed: " ++ (B.unpack str)
                 let (tbl,tr) = parseNewick M.empty name_hack file str
- 	        (chan, _tr) <- viewNewickTree file (FullTree "" tbl (annotateWLabLists tr))
+ 	        (chan, _tr) <- viewNewickTree file (FullTree "" tbl (annotateWLabLists (head tr)))
 	        return chan
 	      forM_ chans readChan 
 	      return ()

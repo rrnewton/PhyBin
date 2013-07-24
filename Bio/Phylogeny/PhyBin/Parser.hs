@@ -24,10 +24,10 @@ type NameHack = (String->String)
 -- | Parse a bytestring into a NewickTree with branch lengths.  The
 --   first argument is file from which the data came and is just for
 --   better error messages.
-parseNewick :: LabelTable -> NameHack -> String -> B.ByteString -> (LabelTable, NewickTree DefDecor)
+parseNewick :: LabelTable -> NameHack -> String -> B.ByteString -> (LabelTable, [NewickTree DefDecor])
 parseNewick tbl0 name_hack file input =
   extractLabelTable tbl0 $ 
-  runB file (newick_parser name_hack) $
+  runB file (many1$ newick_parser name_hack) $
   B.filter (not . isSpace) input
 
 -- treeFiles <- acquireTreeFiles files
@@ -53,34 +53,43 @@ parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [FullTree De
 parseNewicks name_hack pairs = (labtbl, fullTrs)
  where
    fullTrs = [ FullTree (takeBaseName file) labtbl tr
-             | (file,_) <- pairs
-             | tr       <- trs ]
+             | (file,tr) <- trs ]
    (labtbl, trs) = P.foldr fn (M.empty,[]) pairs
    fn (file,bstr) (!acc,!ls) =
-     let (acc',tr) = parseNewick acc name_hack file bstr
-     in (acc', tr:ls)
+     let (acc',trs) = parseNewick acc name_hack file bstr
+         names      = if length trs > 1
+                      then zipWith (\x y -> x++"_"++show y) (repeat file) [0..]
+                      else [file]
+     in (acc', (zip names trs) ++ ls)
 
 runB :: Show a => String -> Parser a -> B.ByteString -> a
 runB file p input = case (parse p "" input) of
 	         Left err -> error ("parse error in file "++ show file ++" at "++ show err)
 		 Right x  -> x
 
-extractLabelTable :: LabelTable -> TempTree -> (LabelTable, NewickTree DefDecor)
-extractLabelTable tbl0 tr = (finMap,finTree)
+extractLabelTable :: LabelTable -> [TempTree] -> (LabelTable, [NewickTree DefDecor])
+extractLabelTable tbl0 trs = (finMap,finTree)
  where
    flipped = M.fromList $ L.map (\(x,y)->(y,x)) $ M.toList tbl0
-   -- (_,finMap,finTree) = loop (S.fromList (M.elems tbl0)) tbl0 tr
-   (_,finMap,finTree) = loop flipped tbl0 tr
-   
-   loop seen acc (NTLeaf (d,Just nm) _)
+   -- (_,finMap,finTree) = loop2 (S.fromList (M.elems tbl0)) tbl0 tr
+   (_,finMap,finTree) = loop1 flipped tbl0 trs
+
+   -- Mere plumbing:
+   loop1 seen acc [] = (seen, acc, [])
+   loop1 seen acc (hd:tl) =
+     let (seen2,acc2,hd') = loop2 seen acc hd 
+         (seen3,acc3,tl') = loop1 seen2 acc2 tl in
+     (seen3,acc3, hd':tl')
+
+   loop2 seen acc (NTLeaf (d,Just nm) _)
      | M.member nm seen = (seen, acc, NTLeaf d (seen M.! nm))
      | otherwise = let nxt = M.size acc in
                    (M.insert nm nxt seen,
                     M.insert nxt nm acc,  NTLeaf d nxt)
-   loop seen1 acc1 (NTInterior (d,Nothing) chlds) =
+   loop2 seen1 acc1 (NTInterior (d,Nothing) chlds) =
      let (seen',acc',ls') = 
           P.foldr (\ x (seen2,acc2,ls) ->
-                   let (seen3,acc3,x') = loop seen2 acc2 x in
+                   let (seen3,acc3,x') = loop2 seen2 acc2 x in
                    (seen3, acc3, x':ls))
                   (seen1,acc1,[])
                   chlds
@@ -185,7 +194,7 @@ name = option "" $ many1 (noneOf "()[]:;, \t\n\r\f\v")
 --------------------------------------------------------------------------------
 
 tre1 :: NewickTree DefDecor
-tre1 = snd $ parseNewick M.empty id "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+tre1 = head $ snd $ parseNewick M.empty id "" $ B.pack "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
 unitTests :: Test
 unitTests = test

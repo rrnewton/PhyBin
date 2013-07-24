@@ -179,13 +179,13 @@ verify_sorted msg =
 
 -- TODO: Salvage any of these tests that are worthwhile and get them into the unit tests:	        	
 tt :: AnnotatedTree
-tt = normalize $ annotateWLabLists $ snd$ parseNewick M.empty id "" "(A,(C,D,E),B);"
+tt = normalize $ annotateWLabLists $ head$ snd$ parseNewick M.empty id "" "(A,(C,D,E),B);"
 
 norm4 :: FullTree StandardDecor
 norm4 = norm "((C,D,E),B,A);"
 
 norm5 :: AnnotatedTree
-norm5 = normalize$ annotateWLabLists$ snd$ parseNewick M.empty id "" "(D,E,C,(B,A));"
+norm5 = normalize$ annotateWLabLists$ head$ snd$ parseNewick M.empty id "" "(D,E,C,(B,A));"
 
 
 ----------------------------------------------------------------------------------------------------
@@ -372,7 +372,9 @@ subtract_weight (StandardDecor l1 bs1 w1 sorted1) node =
 ----------------------------------------------------------------------------------------------------
 
 tre1 :: (LabelTable, NewickTree DefDecor)
-tre1 = parseNewick M.empty id "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
+tre1 = (x,head y)
+ where
+   (x,y) = parseNewick M.empty id "" "(A:0.1,B:0.2,(C:0.3,D:0.4):0.5);"
 
 tre1draw :: IO (Chan (), FullTree StandardDecor)
 tre1draw = viewNewickTree "tre1"$ (FullTree "" (fst tre1) (annotateWLabLists (snd tre1)))
@@ -384,7 +386,7 @@ norm :: String -> FullTree StandardDecor
 norm = norm2 . B.pack
 
 norm2 :: B.ByteString -> FullTree StandardDecor
-norm2 bstr = FullTree "" tbl (normalize $ annotateWLabLists tr)
+norm2 bstr = FullTree "" tbl (normalize $ annotateWLabLists$ head tr)
   where
     (tbl,tr) = parseNewick M.empty id "test" bstr
 

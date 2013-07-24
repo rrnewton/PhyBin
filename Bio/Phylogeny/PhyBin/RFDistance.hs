@@ -49,7 +49,7 @@ import           Debug.Trace
 -- 
 --   A set that is more than a majority of the taxa can be normalized by "flipping",
 --   i.e. taking the taxa that are NOT in that set.
-#if 1
+#if 0
 -- type DenseLabelSet s = BitList
 type DenseLabelSet = UB.Vector B.Bit
 markLabel lab = UB.modify (\vec -> MV.write vec lab (B.fromBool True)) 
@@ -71,8 +71,8 @@ denseUnions _size   = SI.unions
 bipSize             = SI.size
 denseDiff           = SI.difference
 
-dispBip labs bip = show$ map (map (labs M.!)) $ 
-                         map SI.toList bip
+dispBip labs bip = show$ map (labs M.!) $ 
+                         SI.toList bip
 #endif
 
 markLabel    :: Label -> DenseLabelSet -> DenseLabelSet
@@ -87,6 +87,8 @@ dispBip      :: LabelTable -> DenseLabelSet -> String
 -- Dirt-simple reference implementation
 --------------------------------------------------------------------------------
 
+-- define NORMALIZATION
+
 type DistanceMatrix = V.Vector (U.Vector Int)
 
 -- | Returns a triangular distance matrix encoded as a vector.
@@ -97,13 +99,22 @@ distanceMatrix lst =
 --   in V.generate (sz-1) $ \ i ->
    in V.generate sz $ \ i ->        
       U.generate i  $ \ j ->
-      S.size (S.difference (eachbips V.! i) (eachbips V.! j))
-  
+      let diff1 = S.size (S.difference (eachbips V.! i) (eachbips V.! j))
+          diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
+          (q,0) = (diff1 + diff2) `quotRem` 2
+#ifdef NORMALIZATION          
+      in q 
+#else
+      in diff1
+#endif
 -- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
 -- each interior node carries a list of BiPs the same length as its list of children.
 labelBips :: NewickTree a -> NewickTree (a, [DenseLabelSet])
 labelBips tr =
-    trace ("labelbips "++show allLeaves++" "++show size) $
+--    trace ("labelbips "++show allLeaves++" "++show size) $
+#ifdef NORMALIZATION  
+    fmap (\(a,ls) -> (a,map (normBip allLeaves) ls)) $
+#endif
     loop tr
   where    
     size = numLeaves tr
@@ -111,21 +122,24 @@ labelBips tr =
     loop (NTLeaf dec lab) = NTLeaf (dec, [markLabel lab zero]) lab      
     loop (NTInterior dec chlds) =
       let chlds' = map loop chlds
-          sets   = map (normBip . denseUnions size . snd . get_dec) chlds' in
+          sets   = map (denseUnions size . snd . get_dec) chlds' in
       NTInterior (dec, sets) chlds'
 
-    halfSize = size `quot` 2
-    normBip bip =
-      let flipped = denseDiff allLeaves bip in
-      case compare (bipSize bip) halfSize of
-        LT -> bip 
-        GT -> flipped -- Flip it
-        EQ -> min bip flipped -- This is a painful case, we need a tie-breaker
-           
     allLeaves = leafSet tr
     leafSet (NTLeaf _ lab)    = mkSingleDense size lab
     leafSet (NTInterior _ ls) = denseUnions size $ map leafSet ls
 
+normBip :: DenseLabelSet -> DenseLabelSet -> DenseLabelSet
+normBip allLeaves bip =
+  let size     = bipSize allLeaves
+      halfSize = size `quot` 2
+      flipped  = denseDiff allLeaves bip
+  in 
+  case compare (bipSize bip) halfSize of
+    LT -> bip 
+    GT -> flipped -- Flip it
+    EQ -> min bip flipped -- This is a painful case, we need a tie-breaker
+    
 
 foldBips :: Monoid m => (DenseLabelSet -> m) -> NewickTree a -> m
 foldBips f tr = F.foldMap f' (labelBips tr)
