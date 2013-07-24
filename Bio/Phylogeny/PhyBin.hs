@@ -14,7 +14,7 @@ module Bio.Phylogeny.PhyBin
 
 import qualified Data.Foldable as F
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy, foldl1')
+import           Data.List           (delete, minimumBy, sortBy, foldl1', intersperse) 
 import           Data.Maybe          (fromMaybe)
 import           Data.Either         (partitionEithers)
 import           Data.Time.Clock
@@ -322,8 +322,9 @@ outputClusters num_taxa binlist output_dir do_graph = do
     
     forM_ (zip3 [1::Int ..] binlist consTrs) $ \ (i, (size, OneCluster ftrees), fullConsTr) -> do
        writeFile (base i size ++".txt") (concat$ map ((++"\n") . treename) ftrees)
-       writeFile (base i size ++"_consensus.tr")
-         (show (displayStrippedTree fullConsTr) ++ "\n")
+       writeFile (base i size ++"_consensus.tr") (show (displayStrippedTree fullConsTr) ++ "\n")
+       writeFile (base i size ++"_alltrees.tr")
+           (unlines [ show (displayStrippedTree ft) | ft <- ftrees ])
 
     putStrLn$ "[finished] Wrote contents of each cluster to cluster<N>_<size>.txt"
     putStrLn$ "           Wrote representative (consensus) trees to cluster<N>_<size>_consensus.tr"
