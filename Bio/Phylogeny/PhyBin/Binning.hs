@@ -33,7 +33,6 @@ import           System.IO           (openFile, hClose, IOMode(ReadMode))
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
-import qualified HSH 
 
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)

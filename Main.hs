@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, TupleSections #-}
+{-# LANGUAGE RecordWildCards, TupleSections, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 
 module Main where
@@ -17,6 +17,7 @@ import           Test.HUnit            (runTestTT, Test, test, (~:))
 
 import Control.Applicative ((<$>))
 import qualified Data.Vector                 as V
+import           Test.HUnit                  as HU
 
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
@@ -183,47 +184,6 @@ defaultErr :: [String] -> t
 defaultErr errs = error $ "ERROR!\n" ++ (concat errs ++ usageInfo usage options)
 
 --------------------------------------------------------------------------------
--- Aggregated Unit Tests
---------------------------------------------------------------------------------
-
-allUnitTests :: Test
--- allUnitTests = unitTests ++
-allUnitTests = test 
-  [ Bio.Phylogeny.PhyBin.unitTests
-  , Bio.Phylogeny.PhyBin.Parser.unitTests
-  , "norm/Bip1" ~: (testNorm prob1)
-  ]
---  Bio.Phylogeny.PhyBin.Parser.unitTests
-
---    "(5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13)"
--- [2013.07.23]      
--- This was INCORRECTLY normalizing to:
---     ((1_, 2_), (7_, (18, 6_)), ((14, 3_), (19, (13, 5_))))
-prob1 = "(5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13);"
-
--- | Make sure that the normalized version of a tree yields the same bipartitions as
--- the unnormalized one.
-testNorm :: String -> IO ()
-testNorm str = do
-  let (labs,parseds) = parseNewick M.empty id "test" (B.pack str)
-      parsed = head parseds
-      normed = normalize $ annotateWLabLists parsed
-      bips1  = allBips parsed
-      bips2  = allBips normed
-      added   = S.difference bips2 bips1
-      removed = S.difference bips1 bips2
-      -- dispBips bip = show$
-      --   map (map (labs M.!)) $ 
-      --   map IS.toList$ S.toList bip
-  unless (bips1 == bips2) $ do
-    putStrLn$ "Normalized this: "++show (displayDefaultTree $ FullTree "" labs parsed)
-    putStrLn$ "To this        : "++show (displayDefaultTree $ deAnnotate $ FullTree "" labs normed)
-    error$ "Normalization added and removed these bipartitions, respectively:\n  "
-           ++concat (intersperse " " (map (dispBip labs) (S.toList added))) ++"\n  "
-           ++concat (intersperse " " (map (dispBip labs) (S.toList removed)))
-
-
---------------------------------------------------------------------------------
 
 main :: IO ()
 main = 
@@ -357,7 +317,50 @@ temp :: IO ()
 temp = driver default_phybin_config{ num_taxa=7, inputs=["../datasets/test.tr"] }
 
 
+--------------------------------------------------------------------------------
+-- Aggregated Unit Tests
+--------------------------------------------------------------------------------
+
+allUnitTests :: Test
+-- allUnitTests = unitTests ++
+allUnitTests = test 
+  [ Bio.Phylogeny.PhyBin.unitTests
+  , Bio.Phylogeny.PhyBin.Parser.unitTests
+  , "norm/Bip1" ~: (testNorm prob1)
+  , "bipTreeConversion" ~: testBipConversion
+  , "t3" ~: t3_consensusTest, "t4" ~: t4_consensusTest, "t5" ~: t5_consensusTest
+  ]
+
+-- [2013.07.23]      
+-- This was INCORRECTLY normalizing to:
+--     ((1_, 2_), (7_, (18, 6_)), ((14, 3_), (19, (13, 5_))))
+prob1 :: String
+prob1 = "(5_, (19, ((3_, 14), ((2_, 1_), (7_, (6_, 18))))), 13);"
+
+-- | Make sure that the normalized version of a tree yields the same bipartitions as
+-- the unnormalized one.
+testNorm :: String -> IO ()
+testNorm str = do
+  let (labs,parseds) = parseNewick M.empty id "test" (B.pack str)
+      parsed = head parseds
+      normed = normalize $ annotateWLabLists parsed
+      bips1  = allBips parsed
+      bips2  = allBips normed
+      added   = S.difference bips2 bips1
+      removed = S.difference bips1 bips2
+      -- dispBips bip = show$
+      --   map (map (labs M.!)) $ 
+      --   map IS.toList$ S.toList bip
+  unless (bips1 == bips2) $ do
+    putStrLn$ "Normalized this: "++show (displayDefaultTree $ FullTree "" labs parsed)
+    putStrLn$ "To this        : "++show (displayDefaultTree $ deAnnotate $ FullTree "" labs normed)
+    error$ "Normalization added and removed these bipartitions, respectively:\n  "
+           ++concat (intersperse " " (map (dispBip labs) (S.toList added))) ++"\n  "
+           ++concat (intersperse " " (map (dispBip labs) (S.toList removed)))
+
+
 -- 112 and 13
+rftest :: IO ()
 rftest = do 
   (mp,[t1,t2]) <- parseNewickFiles (take 2) ["tests/13.tr", "tests/112.tr"]
   putStrLn$ "Tree 13           : " ++ show (displayDefaultTree t1)
@@ -381,10 +384,25 @@ rftest = do
         collapsed = normalize$ annotateWLabLists tr
     in displayDefaultTree$ deAnnotate $  FullTree nm labs collapsed
 
+-- | This test was done with --editdist 4 
 t3_consensusTest :: IO ()
-t3_consensusTest = do
-  (_,ftrees)  <- parseNewickFiles id ["./tests/t3_consensus/cluster1_215_alltrees.tr"]
-  (_,[ctree]) <- parseNewickFiles id ["./tests/t3_consensus/cluster1_215_consensus.tr"]
+t3_consensusTest = consensusTest "./tests/t3_consensus/cluster1_215_alltrees.tr"
+                                 "./tests/t3_consensus/cluster1_215_consensus.tr"
+
+-- | This test was done with --editdist 0
+t4_consensusTest :: IO ()
+t4_consensusTest = consensusTest "./tests/t4_consensus/cluster1_6_alltrees.tr"
+                                 "./tests/t4_consensus/cluster1_6_consensus.tr"
+
+-- | This test was done with --editdist 1
+t5_consensusTest :: IO ()
+t5_consensusTest = consensusTest "./tests/t5_consensus/cluster1_11_alltrees.tr"
+                                 "./tests/t5_consensus/cluster1_11_consensus.tr"
+
+consensusTest :: String -> String -> IO ()
+consensusTest alltrees consensus = do  
+  (_,ftrees)  <- parseNewickFiles id [alltrees]
+  (_,[ctree]) <- parseNewickFiles id [consensus]
   
   let eachbips      = map (allBips . nwtree) ftrees
       totalBips     = foldl1' S.union        eachbips
@@ -401,7 +419,36 @@ t3_consensusTest = do
   putStrLn " Partial distance matrix WITHIN this cluster:"
   let (mat,_) = distanceMatrix (map nwtree ftrees)
   printDistMat stdout (V.take 30 mat)
+
+  HU.assertEqual "Consensus tree matches intersected bips" cbips intersectBips 
   return ()
+
+testBipConversion :: IO ()
+testBipConversion = 
+  do (_,trs) <- allTestTrees
+     mapM_ testOne trs
+     putStrLn "All trees passed bip conversion."
+  where
+    testOne (FullTree{nwtree}) = do
+      let sz    = numLeaves nwtree   
+          bips  = allBips nwtree
+          tr2   = bipsToTree sz bips
+          bips2 = allBips tr2
+      assertEqual "round trip bips->tree->bips" bips bips2
+
+-- | Read in all test trees which we happen to have put in the repository for testing
+-- purposes.
+allTestTrees :: IO (LabelTable, [FullTree DefDecor])
+allTestTrees =
+  parseNewickFiles id $
+  [ "./tests/t3_consensus/cluster1_215_alltrees.tr"
+  , "./tests/t3_consensus/cluster1_215_consensus.tr"
+  , "./tests/t4_consensus/cluster1_6_alltrees.tr"
+  , "./tests/t4_consensus/cluster1_6_consensus.tr"
+  , "./tests/t5_consensus/cluster1_11_alltrees.tr"
+  , "./tests/t5_consensus/cluster1_11_consensus.tr"
+  ]
+  
 
 ----------------------------------------------------------------------------------------------------
 -- TODO: expose a command line argument for testing.
