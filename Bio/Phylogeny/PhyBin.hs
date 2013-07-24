@@ -150,8 +150,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     (classes,binlist,asyncs) <- case clust_mode of
       BinThem         -> do x <- doBins validtrees
                             -- A list of bins, sorted by size:
-                            let binlist = reverse $ sortBy (compare `on` fst3) $
-                                          map (\ (tr,OneCluster ls) -> (length ls, tr, OneCluster ls)) $
+                            let binlist = reverse $ sortBy (compare `on` fst) $
+                                          map (\ (tr,OneCluster ls) -> (length ls, OneCluster ls)) $
                                           M.toList x
                             return (x,binlist,[])
       ClusterThem lnk -> do
@@ -177,13 +177,10 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
           Just dstThresh -> do
             putStrLn$ "Combining all clusters at distance less than or equal to "++show dstThresh
             let clusts = sliceDendro (fromIntegral dstThresh) dendro
-                wlens  = [ (length ls, consTr, OneCluster ls)
-                         | OneCluster ls <- clusts
-                         , let consTr = fmap (const 0) $
-                                        consensusTree num_taxa $ map nwtree ls
-                         ]
-                sorted0 = reverse$ sortBy (compare `on` fst3) wlens
-            putStrLn$ "After flattening, cluster sizes are: "++show (map fst3 sorted0)
+                -- Cache the lengths:
+                wlens  = [ (length ls, OneCluster ls) | OneCluster ls <- clusts ]
+                sorted0 = reverse$ sortBy (compare `on` fst) wlens
+            putStrLn$ "After flattening, cluster sizes are: "++show (map fst sorted0)
             -- Flatten out the dendogram:
             return (clustsToMap clusts, sorted0, [gvizAsync])
 
@@ -263,17 +260,14 @@ doCluster num_taxa linkage validtrees = do
       dendro = fmap snd $ C.dendrogram linkage ixtrees dist
   return (mat,dendro)
   
--- reportClusts :: ClustMode -> BinResults StandardDecor -> IO [(Int, StrippedTree, OneCluster StandardDecor)]
+reportClusts :: ClustMode -> [(Int, OneCluster StandardDecor)] -> IO ()
 reportClusts mode binlist = do 
-    let 
-        taxa :: S.Set Int
-	taxa = S.unions$ map (S.fromList . all_labels . snd3) binlist -- Expensive!?
-        binsizes = map fst3 binlist
+    let binsizes = map fst binlist
 
     putStrLn$ " Outcome: "++show (length binlist)++" clusters found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
     putStrLn$"  First 50 bin sizes, excluding singletons:"
-    forM_ (zip [1..50] binlist) $ \ (ind, (len, tr, OneCluster ftrees)) -> do
+    forM_ (zip [1..50] binlist) $ \ (ind, (len, OneCluster ftrees)) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$show$
            hcat [text ("  * cluster#"++show ind++", members "++ show len ++", "), 
@@ -281,7 +275,6 @@ reportClusts mode binlist = do
                    BinThem -> vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees$ map nwtree ftrees)++", "),
                                     text "all: " <> pPrint (filter (not . null) $ map (get_bootstraps . nwtree) ftrees)]
                    ClusterThem _ -> hcat [] ]
-    return binlist
 
 -- | Convert a flat list of clusters into a map from individual trees to clusters.
 clustsToMap :: [OneCluster StandardDecor] -> BinResults StandardDecor
@@ -317,27 +310,26 @@ sliceDendro dstThresh den = loop den
 --------------------------------------------------------------------------------
 
 -- outputClusters :: (Num a1, Ord a1, Show a1) => Int -> [(a1, t, OneCluster a)] -> String -> Bool -> IO ()
-outputClusters :: Int -> [(Int, StrippedTree, OneCluster a)] -> String -> Bool -> IO ()
+outputClusters :: Int -> [(Int, OneCluster a)] -> String -> Bool -> IO ()
 outputClusters num_taxa binlist output_dir do_graph = do
     let numbins = length binlist
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
-
-    forM_ (zip [1::Int ..] binlist) $ \ (i, (size, consensusTr, OneCluster ftrees)) -> do
+    let consTrs = [ FullTree "consensus" (labelTable $ head ftrees) nwtr 
+                  | (_, OneCluster ftrees) <- binlist
+                  , let nwtr :: NewickTree StandardDecor
+                        nwtr = annotateWLabLists $ fmap (const (Nothing,0)) $
+                               consensusTree num_taxa $ map nwtree ftrees ]
+    
+    forM_ (zip3 [1::Int ..] binlist consTrs) $ \ (i, (size, OneCluster ftrees), fullConsTr) -> do
        writeFile (base i size ++".txt") (concat$ map ((++"\n") . treename) ftrees)
        writeFile (base i size ++"_consensus.tr")
-         (show (displayStrippedTree $ 
-                FullTree "consensus" (labelTable $ head ftrees) consensusTr
-               ) ++ "\n")
+         (show (displayStrippedTree fullConsTr) ++ "\n")
 
     putStrLn$ "[finished] Wrote contents of each cluster to cluster<N>_<size>.txt"
     putStrLn$ "           Wrote representative (consensus) trees to cluster<N>_<size>_consensus.tr"
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip [1::Int ..] binlist) $ \ (i, (size, consensusTr, OneCluster membs)) -> do
-         let  fullConsTr :: FullTree StandardDecor
-              fullConsTr = FullTree "consensus" (labelTable$ head membs) nwtr
-              nwtr :: NewickTree StandardDecor
-              nwtr = annotateWLabLists $ fmap (const (Nothing,0)) consensusTr
+      forM_ (zip3 [1::Int ..] binlist consTrs) $ \ (i, (size, OneCluster membs), fullConsTr) -> do
     	 when (size > 1 || numbins < 100) $ do
            let dot = dotNewickTree ("cluster #"++ show i) 1.0 fullConsTr
 	   _ <- dotToPDF dot (base i size ++ ".pdf")
@@ -346,12 +338,12 @@ outputClusters num_taxa binlist output_dir do_graph = do
 
     return ()
 
-outputBins :: [(Int, StrippedTree, OneCluster StandardDecor)] -> String -> Bool -> IO ()
+outputBins :: [(Int, OneCluster StandardDecor)] -> String -> Bool -> IO ()
 outputBins binlist output_dir  do_graph = do
     let numbins = length binlist
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
-    let avgs = map (avg_trees . map nwtree . clustMembers . thd3) binlist
-    forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, OneCluster ftrees), avgTree) -> do
+    let avgs = map (avg_trees . map nwtree . clustMembers . snd) binlist
+    forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, OneCluster ftrees), avgTree) -> do
        let FullTree fstName labs _ = head ftrees
            fullAvgTr = FullTree fstName labs avgTree
        writeFile (base i size ++".txt") (concat$ map ((++"\n") . treename) ftrees)
@@ -364,7 +356,7 @@ outputBins binlist output_dir  do_graph = do
     putStrLn$ "           Wrote representative trees to "++filePrefix++"<N>_<binsize>_avg.tr" 
     when (do_graph) $ do
       putStrLn$ "Next do the time consuming operation of writing out graphviz visualizations:"
-      forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, _tr, OneCluster membs), avgTree) -> do
+      forM_ (zip3 [1::Int ..] binlist avgs) $ \ (i, (size, OneCluster membs), avgTree) -> do
          let FullTree fstName labs _ = head membs
              fullAvgTr = FullTree fstName labs avgTree 
     	 when (size > 1 || numbins < 100) $ do 
