@@ -384,15 +384,15 @@ rftest = do
         collapsed = normalize$ annotateWLabLists tr
     in displayDefaultTree$ deAnnotate $  FullTree nm labs collapsed
 
--- | This test was done with --editdist 4 
+-- | This test was done with --editdist 4 --complete
 t3_consensusTest :: IO ()
-t3_consensusTest = consensusTest "./tests/t3_consensus/cluster1_215_alltrees.tr"
-                                 "./tests/t3_consensus/cluster1_215_consensus.tr"
+t3_consensusTest = consensusTest "./tests/t3_consensus/cluster1_284_alltrees.tr"
+                                 "./tests/t3_consensus/cluster1_284_consensus.tr"
 
--- | This test was done with --editdist 0
+-- | This test was done with --editdist 0 --complete
 t4_consensusTest :: IO ()
-t4_consensusTest = consensusTest "./tests/t4_consensus/cluster1_6_alltrees.tr"
-                                 "./tests/t4_consensus/cluster1_6_consensus.tr"
+t4_consensusTest = consensusTest "./tests/t4_consensus/cluster1_16_alltrees.tr"
+                                 "./tests/t4_consensus/cluster1_16_consensus.tr"
 
 -- | This test was done with --editdist 1 --complete
 t5_consensusTest :: IO ()
@@ -430,7 +430,7 @@ consensusTest alltrees consensus = do
   putStrLn " Partial distance matrix WITHIN this cluster:"
   let (mat,_) = distanceMatrix (map nwtree ftrees)
   printDistMat stdout (V.take 30 mat)
-  HU.assertBool "Consensus should only include bips in the members" (S.isSubsetOf cbips totalBips)
+  HU.assertBool "Consensus should only include bicbips2ps in the members" (S.isSubsetOf cbips totalBips)
   HU.assertEqual "Consensus tree matches intersected bips" cbips intersectBips 
   return ()
 
@@ -452,10 +452,10 @@ testBipConversion =
 allTestTrees :: IO (LabelTable, [FullTree DefDecor])
 allTestTrees =
   parseNewickFiles id $
-  [ "./tests/t3_consensus/cluster1_215_alltrees.tr"
-  , "./tests/t3_consensus/cluster1_215_consensus.tr"
-  , "./tests/t4_consensus/cluster1_6_alltrees.tr"
-  , "./tests/t4_consensus/cluster1_6_consensus.tr"
+  [ "./tests/t3_consensus/cluster1_284_alltrees.tr"
+  , "./tests/t3_consensus/cluster1_284_consensus.tr"
+  , "./tests/t4_consensus/cluster1_16_alltrees.tr"
+  , "./tests/t4_consensus/cluster1_16_consensus.tr"
   , "./tests/t5_consensus/cluster1_35_alltrees.tr"
   , "./tests/t5_consensus/cluster1_35_consensus.tr"
   ]
