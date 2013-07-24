@@ -363,12 +363,13 @@ consensusTree :: Int -> [NewickTree a] -> NewickTree ()
 consensusTree _ [] = error "Cannot take the consensusTree of the empty list"
 consensusTree num_taxa (hd:tl) = bipsToTree num_taxa intersection
   where
-    intersection = loop (allBips hd) tl
-    loop :: S.Set DenseLabelSet -> [NewickTree a] -> S.Set DenseLabelSet
-    loop !remain []      = remain
-    -- Was attempting to use foldBips here as an optimization:
---     loop !remain (hd:tl) = loop (foldBips S.delete hd remain) tl
-    loop !remain (hd:tl) = loop (S.difference remain (allBips hd)) tl    
+    intersection = L.foldl1' S.intersection (map allBips (hd:tl))
+--     intersection = loop (allBips hd) tl
+--     loop :: S.Set DenseLabelSet -> [NewickTree a] -> S.Set DenseLabelSet
+--     loop !remain []      = remain
+--     -- Was attempting to use foldBips here as an optimization:
+-- --     loop !remain (hd:tl) = loop (foldBips S.delete hd remain) tl
+--     loop !remain (hd:tl) = loop (S.difference remain (allBips hd)) tl    
       
 -- | Convert from bipartitions BACK to a single tree.
 bipsToTree :: Int -> S.Set DenseLabelSet -> NewickTree ()

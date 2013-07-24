@@ -394,15 +394,17 @@ t4_consensusTest :: IO ()
 t4_consensusTest = consensusTest "./tests/t4_consensus/cluster1_6_alltrees.tr"
                                  "./tests/t4_consensus/cluster1_6_consensus.tr"
 
--- | This test was done with --editdist 1
+-- | This test was done with --editdist 1 --complete
 t5_consensusTest :: IO ()
-t5_consensusTest = consensusTest "./tests/t5_consensus/cluster1_11_alltrees.tr"
-                                 "./tests/t5_consensus/cluster1_11_consensus.tr"
+t5_consensusTest = consensusTest "./tests/t5_consensus/cluster1_35_alltrees.tr"
+                                 "./tests/t5_consensus/cluster1_35_consensus.tr"
 
 consensusTest :: String -> String -> IO ()
 consensusTest alltrees consensus = do  
   (_,ctree:ftrees)  <- parseNewickFiles id [consensus,alltrees]
-  let eachbips      = map (allBips . nwtree) ftrees
+  let num_taxa      = numLeaves (nwtree ctree)
+      plainTrs      = map nwtree  ftrees 
+      eachbips      = map allBips plainTrs
       totalBips     = foldl1' S.union        eachbips
       intersectBips = foldl1' S.intersection eachbips
       FullTree _ labs _ = ctree
@@ -416,7 +418,15 @@ consensusTest alltrees consensus = do
   let cbips = allBips $ nwtree ctree
   putStrLn$ "ConsensusBips ("++show (S.size cbips)++"):\n"++linesPrnt cbips
   putStrLn$"Things in the consensus that should NOT be:\n"++linesPrnt (S.difference cbips intersectBips)
-  putStrLn$"Things not in the consensus that SHOULD be:\n"++linesPrnt (S.difference intersectBips cbips) 
+  putStrLn$"Things not in the consensus that SHOULD be:\n"++linesPrnt (S.difference intersectBips cbips)
+
+  putStrLn$ "Now recomputing consensus tree for "++show num_taxa++" taxa"
+  let ctree2 = consensusTree num_taxa plainTrs
+      cbips2 = allBips ctree2
+  putStrLn$ "Freshly recomputed consensusBips ("++show (S.size cbips2)++"):\n"++linesPrnt cbips2
+  HU.assertEqual "Consensus tree on disk should match computed one:"
+         cbips cbips2 -- (allBips$ fmap (const ()) $ nwtree ctree)         
+  
   putStrLn " Partial distance matrix WITHIN this cluster:"
   let (mat,_) = distanceMatrix (map nwtree ftrees)
   printDistMat stdout (V.take 30 mat)
@@ -446,8 +456,8 @@ allTestTrees =
   , "./tests/t3_consensus/cluster1_215_consensus.tr"
   , "./tests/t4_consensus/cluster1_6_alltrees.tr"
   , "./tests/t4_consensus/cluster1_6_consensus.tr"
-  , "./tests/t5_consensus/cluster1_11_alltrees.tr"
-  , "./tests/t5_consensus/cluster1_11_consensus.tr"
+  , "./tests/t5_consensus/cluster1_35_alltrees.tr"
+  , "./tests/t5_consensus/cluster1_35_consensus.tr"
   ]
   
 
