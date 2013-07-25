@@ -394,19 +394,21 @@ consensusTree num_taxa (hd:tl) = bipsToTree num_taxa intersection
       
 -- | Convert from bipartitions BACK to a single tree.
 bipsToTree :: Int -> S.Set DenseLabelSet -> NewickTree ()
-bipsToTree num_taxa bip =
+bipsToTree num_taxa origbip =
+--  trace ("Doing bips in order: "++show sorted++"\n") $ 
   loop lvl0 sorted
   where
     -- We consider each subset in increasing size order.
     -- FIXME: If we tweak the order on BIPs, then we can just use S.toAscList here:
-    sorted = L.sortBy (compare `on` bipSize) (S.toList bip)
+    sorted = L.sortBy (compare `on` bipSize) (S.toList origbip)
 
     lvl0 = [ (mkSingleDense num_taxa ix, NTLeaf () ix)
            | ix <- [0..num_taxa-1] ]
 
     -- VERY expensive!  However, due to normalization issues this is necessary for now:
     -- TODO: in the future make it possible to definitively denormalize.
-    isMatch bip x = denseIsSubset x bip || denseIsSubset x (invertDense num_taxa bip)
+    -- isMatch bip x = denseIsSubset x bip || denseIsSubset x (invertDense num_taxa bip)
+    isMatch bip x = denseIsSubset x bip 
 
     -- We recursively glom together subtrees until we have a complete tree.
     -- We only process larger subtrees after we have processed all the smaller ones.
@@ -416,11 +418,12 @@ bipsToTree num_taxa bip =
         [(_,one)] -> one
         lst   -> NTInterior () (map snd lst)
     loop !subtrees (bip:tl) =
+--      trace (" -> looping, subtrees "++show subtrees) $ 
       let (in_,out) = L.partition (isMatch bip. fst) subtrees in
       case in_ of
-        [] -> error $"Hmm... no match for bip: "++show bip
+        [] -> error $"bipsToTree: Internal error!  No match for bip: "++show bip
               ++" out is\n "++show out++"\n and remaining bips "++show (length tl)
-              ++"\n when processing orig bip set:\n  "++show bip
+              ++"\n when processing orig bip set:\n  "++show origbip
           -- loop out tl
         _ -> 
          -- Here all subtrees that match the current bip get merged:
