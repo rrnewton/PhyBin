@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.2.5
+Version:        0.2.6
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -15,6 +15,7 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 -- 0.2 -- Add Robinson-Foulds distance, use Int labels.
 -- 0.2.2 -- misc changes and expose library
 -- 0.2.4 -- add consensus trees
+-- 0.2.6 -- colorization, hashrf, misc improvements
 
 -- homepage: http://code.haskell.org/phybin
 -- homepage: http://people.csail.mit.edu/newton/phybin/
