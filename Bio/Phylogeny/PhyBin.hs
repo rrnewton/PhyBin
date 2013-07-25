@@ -97,7 +97,10 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let num_files = length goodFiles
     bstrs <- mapM B.readFile goodFiles
     let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
-
+        
+    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++
+	      (unwords$ M.elems labelTab)
+--	      show (nest 2 $ sep $ map text $ M.elems labelTab)    
     --------------------------------------------------------------------------------
 
     case branch_collapse_thresh of 
@@ -159,7 +162,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
         when print_rfmatrix $ printDistMat stdout mat
         writeFile (combine output_dir ("dendrogram.txt"))
                   (show$ fmap treename dendro)
-        putStrLn "Wrote full dendrogram to file dendrogram.txt"
+        putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
 
         gvizAsync <- if do_graph
                      then async (do 
@@ -176,7 +179,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
         hClose hnd
 
         case dist_thresh of
-          Nothing -> error "Fully hierarchical cluster output is not finished!  Use --editdist."
+          Nothing -> return (M.empty,[],[]) -- error "Fully hierarchical cluster output is not finished!  Use --editdist."
           Just dstThresh -> do
             putStrLn$ "Combining all clusters at distance less than or equal to "++show dstThresh
             let clusts = sliceDendro (fromIntegral dstThresh) dendro
@@ -187,7 +190,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
             -- Flatten out the dendogram:
             return (clustsToMap clusts, sorted0, [gvizAsync])
 
-    reportClusts clust_mode binlist
+    unless (null binlist)$ reportClusts clust_mode binlist
         
     ----------------------------------------
     -- TEST, TEMPTOGGLE: print out edge weights :
@@ -201,10 +204,6 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     --------------------------------------------------------------------------------
     -- Finally, produce all the required outputs.
     --------------------------------------------------------------------------------
-
-    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++
-	      (unwords$ M.elems labelTab)
---	      show (nest 2 $ sep $ map text $ M.elems labelTab)
 
 --    putStrLn$ "Final number of tree bins: "++ show (M.size classes)
 
@@ -338,7 +337,7 @@ outputClusters num_taxa binlist output_dir do_graph = do
            (unlines [ show (displayStrippedTree ft) | ft <- ftrees ])
 
     putStrLn$ " [finished] Wrote contents of each cluster to cluster<N>_<size>.txt"
-    putStrLn$ "            Wrote representative (consensus) trees to cluster<N>_<size>_consensus.tr"
+    putStrLn$ " [finished] Wrote representative (consensus) trees to cluster<N>_<size>_consensus.tr"
     if do_graph then do
       putStrLn$ "Next start the time consuming operation of writing out graphviz visualizations:"
       asyncs <- forM (zip3 [1::Int ..] binlist consTrs) $
