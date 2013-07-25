@@ -250,7 +250,8 @@ doBins validtrees = do
 
 doCluster :: Bool -> Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
 doCluster use_hashrf num_taxa linkage validtrees = do
-  putStrLn$ "Clustering using method "++show linkage
+  t0 <- getCurrentTime
+  when use_hashrf$ putStrLn " Using HashRF-style algorithm..."
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees
       mat = if use_hashrf 
@@ -263,6 +264,11 @@ doCluster use_hashrf num_taxa linkage validtrees = do
                          | otherwise  = fromIntegral ((mat V.! j) U.! i)
       dist1 a b = trace ("Taking distance between "++show (fst a, fst b)) $ dist a b
       dendro = fmap snd $ C.dendrogram linkage ixtrees dist
+  -- Force the distance matrix:
+  V.mapM_ evaluate mat
+  t1 <- getCurrentTime
+  putStrLn$ "Time to compute distance matrix: "++show(diffUTCTime t1 t0)
+  putStrLn$ "Clustering using method "++show linkage
   return (mat,dendro)
   
 reportClusts :: ClustMode -> [(Int, OneCluster StandardDecor)] -> IO ()
