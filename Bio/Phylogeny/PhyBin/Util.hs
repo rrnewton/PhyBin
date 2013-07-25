@@ -27,7 +27,8 @@ import           Control.Concurrent  (Chan)
 import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
-import           System.IO           (openFile, hClose, IOMode(ReadMode))
+import           System.IO           (openFile, hClose, IOMode(ReadMode), stderr,
+                                      hPutStr, hPutStrLn)
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
@@ -90,18 +91,18 @@ acquireTreeFiles inputs = do
       --stat   <- if exists then getFileStatus path else return (error "internal invariant")
       -- [2010.09.23] This is no longer really necessary:
       if not exists then do 
-	 putStr$ "Input not a file/directory, assuming wildcard, using 'find' for expansion"
+	 hPutStr stderr$ "Input not a file/directory, assuming wildcard, using 'find' for expansion"
 	 entries <- HSH.run$ "find " ++ path	 
-	 putStrLn$ "("++show (length entries)++" files found):  "++ show path
+	 hPutStrLn stderr$ "("++show (length entries)++" files found):  "++ show path
 	 return entries
        else do
 	 isdir <- is_directory path
 	 reg  <- is_regular_file path
 	 if isdir then do 
-	    putStr$ "Input is a directory, reading all regular files contained "
+	    hPutStr stderr$ "Input is a directory, reading all regular files contained "
 	    children <- getDirectoryContents path
 	    filtered <- filterM is_regular_file $ map (combine path) children
-	    putStrLn$ "("++show (length filtered)++" regular files found):  "++ show path
+	    hPutStrLn stderr$ "("++show (length filtered)++" regular files found):  "++ show path
 	    return$ filtered
           else if reg then do 
 	    return [path]

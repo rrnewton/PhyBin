@@ -9,7 +9,7 @@
 
 module Bio.Phylogeny.PhyBin
        ( driver, binthem, normalize, annotateWLabLists, unitTests, acquireTreeFiles,
-         deAnnotate )
+         deAnnotate, retrieveHighlights, matchAnyHighlight )
        where
 
 import qualified Data.Foldable as F
@@ -113,16 +113,9 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let num_files = length goodFiles
     bstrs <- mapM B.readFile goodFiles
     let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
-
-        parseHighlight file = do 
-          bs <- B.readFile file
-          let (lt2,htr) = parseNewick labelTab name_hack file bs
-          unless (lt2 == labelTab) $
-            error$"Tree given as --highlight includes taxa not present in main tree set: "++
-                  show(M.keys$ M.difference lt2 labelTab)            
-          return (map (fmap (const())) htr)
-    highlightTrs <- mapM parseHighlight highlights
-    
+          
+    highlightTrs <- retrieveHighlights name_hack labelTab highlights
+        
     putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++
 	      (unwords$ M.elems labelTab)
 --	      show (nest 2 $ sep $ map text $ M.elems labelTab)    
@@ -474,3 +467,30 @@ avg_trees origls =
 type TempDecor = (Double, (Int, Int), Int, [Label])
 
 avg ls = sum ls / fromIntegral (length ls)
+
+-- | Parse trees in addition to the main inputs (for --highlight).
+retrieveHighlights :: (String->String) -> LabelTable -> [FilePath] -> IO [[NewickTree ()]]
+retrieveHighlights name_hack labelTab ls =
+  mapM parseHighlight ls
+  where
+    parseHighlight file = do 
+      bs <- B.readFile file
+      let (lt2,htr) = parseNewick labelTab name_hack file bs
+      unless (lt2 == labelTab) $
+        error$"Tree given as --highlight includes taxa not present in main tree set: "++
+              show(M.keys$ M.difference lt2 labelTab)            
+      return (map (fmap (const())) htr)
+
+
+-- | Create a predicate that tests trees for consistency with the set of --highlight
+-- (consensus) trees.
+matchAnyHighlight :: [[NewickTree ()]] -> NewickTree () -> Bool      
+-- matchAnyHighlight :: [[NewickTree ()]] -> NewickTree () -> Maybe Int
+-- If there is a match, return the index of the highlight that matched.
+matchAnyHighlight highlightTrs =
+   let matchers = map mkMatcher highlightTrs
+       mkMatcher ls = let fns = map compatibleWith ls -- Multiple predicate functions
+                      in \ tr -> -- Does it match any predicate?
+                          or$ map (\f -> f tr) fns   
+   in \ newtr -> 
+       any (\f -> f newtr) matchers

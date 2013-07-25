@@ -24,7 +24,8 @@ import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 import Bio.Phylogeny.PhyBin.CoreTypes          
 import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists,
-                                       unitTests, acquireTreeFiles, deAnnotate)
+                                       unitTests, acquireTreeFiles, deAnnotate,
+                                       retrieveHighlights, matchAnyHighlight)
 import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
 import Bio.Phylogeny.PhyBin.RFDistance 
@@ -58,7 +59,7 @@ data Flag
     | HashRF Bool
     | SelfTest
     | RFMatrix | LineSetDiffMode
-    | PrintNorms | PrintReg | PrintConsensus
+    | PrintNorms | PrintReg | PrintConsensus | PrintMatching
     | Cluster C.Linkage
     | BinningMode
     | EditDistThresh Int
@@ -109,7 +110,7 @@ options =
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
      , Option ['g']     ["graphbins"] (NoArg Graph)  "use graphviz to produce .dot and .pdf output files"
--- TODO: Produce the consensus tree as well as the individual trees.
+      -- TODO: Produce the consensus tree as well as the individual trees.
      , Option ['d']     ["drawbins"]  (NoArg Draw)   "like -g, but open GUI windows to show each bin's tree"
 
      , Option ['w']     ["view"]    (NoArg View)$  "for convenience, \"view mode\" simply displays input Newick files without binning" 
@@ -163,6 +164,7 @@ options =
      , Option [] ["print"]      (NoArg PrintReg)     "simply print out a concise form of each input tree"       
      , Option [] ["printnorms"] (NoArg PrintNorms)   "simply print out a concise and NORMALIZED form of each input tree"
      , Option [] ["consensus"]  (NoArg PrintConsensus) "print a strict consensus tree for the inputs, then exit"
+     , Option [] ["matching"] (NoArg PrintMatching) "print a list of tree names that match any --highlight argument"
      ]
  where
    hashRF = use_hashrf default_phybin_config
@@ -241,7 +243,8 @@ main =
 
            PrintNorms     -> return cfg
            PrintReg       -> return cfg
-           PrintConsensus -> return cfg           
+           PrintConsensus -> return cfg
+           PrintMatching  -> return cfg
            
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
            HashRF  bl  -> return cfg { use_hashrf = bl }
@@ -299,6 +302,16 @@ main =
        let ctree = consensusTree (num_taxa config) (map nwtree fts)
            FullTree{labelTable} = head fts
        print$ displayStrippedTree$ FullTree "" labelTable ctree
+       exitSuccess       
+     ------------------------------------------------------------
+     when (elem PrintMatching opts) $ do 
+       (labs,fts) <- parseNewickFiles (name_hack config) all_inputs
+       when (null$ highlights config) $ error "No --highlight given, so --matching makes no sense.  Matching what?"
+       htrs <- retrieveHighlights (name_hack config) labs (highlights config)
+       let isMatch = matchAnyHighlight htrs
+       forM_ fts $ \ FullTree{treename,nwtree} ->
+         when (isMatch$ fmap (const()) nwtree) $
+          putStrLn treename
        exitSuccess       
      ------------------------------------------------------------
      when (View `elem` opts) $ do 
