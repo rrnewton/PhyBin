@@ -28,7 +28,7 @@ import           Data.GraphViz.Attributes.Colors   (Color(RGB))
 import qualified Data.Clustering.Hierarchical as C
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
-import           Bio.Phylogeny.PhyBin.RFDistance (filterCompatible, compatibleWith)
+import           Bio.Phylogeny.PhyBin.RFDistance (filterCompatible, compatibleWith, consensusTree)
 
 ----------------------------------------------------------------------------------------------------
 -- Visualization with GraphViz and FGL:
@@ -79,11 +79,17 @@ dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
   -- This is ugly, but we modify the name map to match:
   nameMap' = fmap (M.mapKeys (drop charsDropped)) mNameMap  
   graph :: DendroGraph
-  graph = dendrogramToGraph dendro
+  graph = dendrogramToGraph num_taxa dendro
+
+  num_taxa = numLeaves $ nwtree fstLeaf
+  FullTree{labelTable} = fstLeaf
+  fstLeaf = getFstLeaf dendro
+  getFstLeaf (C.Leaf ft)      = ft
+  getFstLeaf (C.Branch _ l _) = getFstLeaf l 
 
   uidsToNames = M.fromList $
-                map (\NdLabel{uid,tre=Just t,clumpSize} -> (uid,(t,clumpSize))) $
-                filter (isJust . tre) $ 
+                map (\nd@NdLabel{uid} -> (uid,nd)) $
+--                filter (isJust . tre) $ 
                 map (fromJust . G.lab graph) $  
                 G.nodes graph
 
@@ -101,7 +107,7 @@ dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
   -- Map uids to highlight color
   highlightMap = M.map fromJust $
                  M.filter isJust $
-                 M.map (\ (FullTree{treename,nwtree},_) -> findColor nwtree)
+                 M.map (\ (NdLabel _ _ _ ct) -> findColor ct)
                  uidsToNames
 
   myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
@@ -117,12 +123,20 @@ dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
         printed_tree =
           case M.lookup uid uidsToNames of
             Nothing -> ""
-            Just (ft,sz) -> (if sz>1 then "size "++show sz++"\n" else "")
-                            ++ show (displayStrippedTree ft)
-        (tag,shp) = -- case eith of
+            Just NdLabel{clumpSize,consensus} ->
+              (if clumpSize>1 then "size "++show clumpSize++"\n" else "")
+              ++ show (displayStrippedTree (FullTree "" labelTable consensus))
+        (tag,shp,styl) = -- case eith of
           if isPrefixOf "DUMMY_" uid
-          then ("", GA.PointShape)          
-          else (uid', GA.Ellipse)          
+          then (if show_trees_in_dendro
+                then printed_tree else "",
+                -- GA.PointShape
+                -- GA.Ellipse,
+                GA.PlainText,
+                [] -- [GA.SItem GA.Invisible []]
+                -- [ GA.Color [weighted$ GA.X11Color Gv.Transparent] ]
+               )
+          else (uid', GA.Ellipse, [GA.SItem GA.Filled []])
         highlightColor = 
           case M.lookup uid highlightMap of
             Nothing  -> []
@@ -130,17 +144,18 @@ dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
         clustColor | not (null highlightTrs) = []
                    | otherwise = 
           case (nameMap', M.lookup uid uidsToNames) of
-            (Just nm, Just (FullTree{treename=trN},_)) ->
-              case M.lookup trN nm of
+            (Just nm, Just NdLabel{tre=Just FullTree{treename}}) ->
+              case M.lookup treename nm of
                 Nothing -> []
                 -- Here we color the top TEN clusters:
                 Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPaletteV V.! (ind-1) ] ]
                          | otherwise -> []
+            -- TODO: shall we color intermediate nodes?
             _ -> []
     in 
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
-    , GA.Style [GA.SItem GA.Filled []]
+    , GA.Style styl
     ] ++ highlightColor ++ clustColor
 
   edgeAttrs = getEdgeAttrs edge_scale
@@ -157,16 +172,20 @@ data NdLabel =
   { uid       :: UniqueNodeName
   , tre       :: Maybe (FullTree ())
   , clumpSize :: !Int
+  , consensus :: NewickTree ()
   }
   deriving (Show, Ord, Eq)
 
 -- | Create a graph using TreeNames for node labels and edit-distance for edge labels.
-dendrogramToGraph :: C.Dendrogram (FullTree a) -> DendroGraph
-dendrogramToGraph orig =
+dendrogramToGraph :: Int -> C.Dendrogram (FullTree a) -> DendroGraph
+dendrogramToGraph num_taxa orig =
   G.run_ G.empty $ void$
     loop (fmap (fmap (const())) orig)
   where
- loop node@(C.Leaf ft) = G.insMapNodeM (NdLabel (treename ft) (Just$ fmap (const()) ft) 1)
+-- loop node@(C.Leaf ft) = G.insMapNodeM (NdLabel (treename ft) (Just$ fmap (const()) ft) 1 ft)
+ loop node@(C.Leaf ft) =
+   let stripped = fmap (const()) ft in
+   G.insMapNodeM (NdLabel (treename ft) (Just stripped) 1 (nwtree stripped))
  loop node@(C.Branch 0 left right) = do
    -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
    ----------------------------------------
@@ -180,14 +199,15 @@ dendrogramToGraph orig =
        perline = ceiling$ sqrt (fromIntegral total / ((fromIntegral avg)^2))
        chunked = chunksOf perline nms
        fatname = unlines (map unwords chunked)
-   G.insMapNodeM (NdLabel fatname (Just (head lvs)) (length lvs))
+   G.insMapNodeM (NdLabel fatname (Just (head lvs))
+                  (length lvs) (consensusTree num_taxa (map nwtree lvs)))
    ----------------------------------------   
  loop node@(C.Branch dist left right) =
-    do (_,ll@(NdLabel lid _ s1)) <- loop left
-       (_,rr@(NdLabel rid _ s2)) <- loop right
+    do (_,ll@(NdLabel lid _ s1 c1)) <- loop left
+       (_,rr@(NdLabel rid _ s2 c2)) <- loop right
        -- Interior nodes do NOT have their names drawn:
        let ndname = "DUMMY_"++(lid++"_"++rid)  -- HACK!
-       (midN,mid) <- G.insMapNodeM (NdLabel ndname Nothing (s1+s2))
+       (midN,mid) <- G.insMapNodeM (NdLabel ndname Nothing (s1+s2) (consensusTree num_taxa [c1,c2]))
        G.insMapEdgeM (ll, mid, dist)
        G.insMapEdgeM (rr, mid, dist)
        return (midN,mid)

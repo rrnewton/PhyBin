@@ -57,7 +57,8 @@ data Flag
 
     | HashRF Bool
     | SelfTest
-    | RFMatrix | LineSetDiffMode | PrintNorms | PrintReg
+    | RFMatrix | LineSetDiffMode
+    | PrintNorms | PrintReg | PrintConsensus
     | Cluster C.Linkage
     | BinningMode
     | EditDistThresh Int
@@ -159,6 +160,7 @@ options =
      , Option [] ["setdiff"] (NoArg LineSetDiffMode) "for convenience, print the set difference between cluster*.txt files"
      , Option [] ["print"]      (NoArg PrintReg)     "simply print out a concise form of each input tree"       
      , Option [] ["printnorms"] (NoArg PrintNorms)   "simply print out a concise and NORMALIZED form of each input tree"
+     , Option [] ["consensus"]  (NoArg PrintConsensus) "print a strict consensus tree for the inputs, then exit"
      ]
  where
    hashRF = use_hashrf default_phybin_config
@@ -234,8 +236,9 @@ main =
                oth -> error $"Line set difference mode expects two files as input, got "++show(length oth)
              exitSuccess
 
-           PrintNorms -> return cfg
-           PrintReg   -> return cfg
+           PrintNorms     -> return cfg
+           PrintReg       -> return cfg
+           PrintConsensus -> return cfg           
            
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
            HashRF  bl  -> return cfg { use_hashrf = bl }
@@ -285,6 +288,15 @@ main =
          putStrLn$ show$ displayDefaultTree$ deAnnotate $
            liftFT (normalize . annotateWLabLists) ft
        exitSuccess
+     ------------------------------------------------------------
+     when (elem PrintConsensus opts) $ do 
+       (_,fts) <- parseNewickFiles (name_hack config) all_inputs
+       putStrLn $ "Strict Consensus Tree of "++show (length fts)++" trees:"
+       when (null fts) $ error "No trees provided!"
+       let ctree = consensusTree (num_taxa config) (map nwtree fts)
+           FullTree{labelTable} = head fts
+       print$ displayStrippedTree$ FullTree "" labelTable ctree
+       exitSuccess       
      ------------------------------------------------------------
      when (View `elem` opts) $ do 
        view_graphs config
