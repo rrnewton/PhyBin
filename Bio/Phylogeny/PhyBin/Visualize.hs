@@ -79,7 +79,7 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
   graph = dendrogramToGraph dendro
 
   uidsToNames = M.fromList $
-                map (\NdLabel{uid,tre=Just t} -> (uid,t)) $ 
+                map (\NdLabel{uid,tre=Just t,clumpSize} -> (uid,(t,clumpSize))) $ 
                 filter (isJust . tre) $ 
                 map (fromJust . G.lab graph) $  
                 G.nodes graph
@@ -97,7 +97,8 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
         printed_tree =
           case M.lookup uid uidsToNames of
             Nothing -> ""
-            Just ft -> show (displayStrippedTree ft)
+            Just (ft,sz) -> (if sz>1 then "size "++show sz++"\n" else "")
+                            ++ show (displayStrippedTree ft)
         (tag,shp) = -- case eith of
           if isPrefixOf "DUMMY_" uid
           then ("", GA.PointShape)          
@@ -108,7 +109,7 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
     , GA.Style [GA.SItem GA.Filled []]
     ] ++
     case (nameMap', M.lookup uid uidsToNames) of
-      (Just nm, Just (FullTree{treename=trN})) ->
+      (Just nm, Just (FullTree{treename=trN},_)) ->
         case M.lookup trN nm of
           Nothing -> []
           -- Here we color the top TEN clusters:
@@ -126,8 +127,9 @@ type DendroGraph = G.Gr NdLabel Double
 -- hanging off of each node.
 data NdLabel =
   NdLabel
-  { uid  :: UniqueNodeName
-  , tre :: Maybe (FullTree ())
+  { uid       :: UniqueNodeName
+  , tre       :: Maybe (FullTree ())
+  , clumpSize :: !Int
   }
   deriving (Show, Ord, Eq)
 
@@ -137,7 +139,7 @@ dendrogramToGraph orig =
   G.run_ G.empty $ void$
     loop (fmap (fmap (const())) orig)
   where
- loop node@(C.Leaf ft) = G.insMapNodeM (NdLabel (treename ft) (Just$ fmap (const()) ft))
+ loop node@(C.Leaf ft) = G.insMapNodeM (NdLabel (treename ft) (Just$ fmap (const()) ft) 1)
  loop node@(C.Branch 0 left right) = do
    -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
    ----------------------------------------
@@ -151,14 +153,14 @@ dendrogramToGraph orig =
        perline = ceiling$ sqrt (fromIntegral total / ((fromIntegral avg)^2))
        chunked = chunksOf perline nms
        fatname = unlines (map unwords chunked)
-   G.insMapNodeM (NdLabel fatname (Just (head lvs)))
+   G.insMapNodeM (NdLabel fatname (Just (head lvs)) (length lvs))
    ----------------------------------------   
  loop node@(C.Branch dist left right) =
-    do (_,ll@(NdLabel lid _)) <- loop left
-       (_,rr@(NdLabel rid _)) <- loop right
+    do (_,ll@(NdLabel lid _ s1)) <- loop left
+       (_,rr@(NdLabel rid _ s2)) <- loop right
        -- Interior nodes do NOT have their names drawn:
        let ndname = "DUMMY_"++(lid++"_"++rid)  -- HACK!
-       (midN,mid) <- G.insMapNodeM (NdLabel ndname Nothing)
+       (midN,mid) <- G.insMapNodeM (NdLabel ndname Nothing (s1+s2))
        G.insMapEdgeM (ll, mid, dist)
        G.insMapEdgeM (rr, mid, dist)
        return (midN,mid)

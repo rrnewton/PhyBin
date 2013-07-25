@@ -48,6 +48,7 @@ import           Bio.Phylogeny.PhyBin.Binning
 import           Bio.Phylogeny.PhyBin.Util
 
 import Debug.Trace
+----------------------------------------------------------------------------------------------------
 
 -- Turn on for extra invariant checking:
 debug :: Bool
@@ -63,6 +64,10 @@ type Async t = Async.Async t
 async = Async.async
 wait  = Async.wait
 #endif
+
+-- | A dendrogram PLUS consensus trees at the intermediate points.
+data DendroPlus a = DPLeaf (FullTree a)
+                  | DPBranch !Double (FullTree ()) (DendroPlus a) (DendroPlus a)
 
 ----------------------------------------------------------------------------------------------------
 
@@ -285,7 +290,8 @@ doCluster use_hashrf num_taxa linkage validtrees = do
   putStrLn$ "Time to compute distance matrix: "++show(diffUTCTime t1 t0)
   putStrLn$ "Clustering using method "++show linkage
   return (mat,dendro)
-  
+
+
 reportClusts :: ClustMode -> [(Int, OneCluster StandardDecor)] -> IO ()
 reportClusts mode binlist = do 
     let binsizes = map fst binlist
