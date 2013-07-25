@@ -243,35 +243,31 @@ type TreeID = AnnotatedTree
 -- produce (non-localized) increments to a distance matrix.
 hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix
 hashRF num_taxa trees = do 
-    bigtable <- getBigtable
-    return (error "FINISH")
+    IMapSnap bigtable <- getBigtable
+    return $! ingest bigtable
   where
     getBigtable :: IO (Snapshot (IMap DenseLabelSet) (Snapshot IS.ISet Int))
+--    getBigtable :: IO (Snapshot (IMap DenseLabelSet) (S.Set Int))
     getBigtable = runParThenFreezeIO par
 
     par :: forall d s . Par d s (IMap DenseLabelSet s (IS.ISet s Int))
     par =  do themp <- newEmptyMap
 --              build themp (zip [0..] trees)
-              mapM_ (build themp) (zip [0..] trees)
+              let domain = V.fromList (zip [0..] trees)
+              parForTiled 16 (0,V.length domain) $ \ ix ->
+                build themp (domain V.! ix)
+
               return themp
     num_trees = length trees
     -- First build the table:
---    build :: M.Map DenseLabelSet DenseLabelSet -> [(Int,NewickTree dec)] -> Par d s DistanceMatrix
---     build :: IMap DenseLabelSet s DenseLabelSet -> [(Int,NewickTree dec)] -> Par d s DistanceMatrix
---    build :: IMap DenseLabelSet s (IS.ISet s Int) -> [(Int,NewickTree dec)] -> Par d s DistanceMatrix
     build :: IMap DenseLabelSet s (IS.ISet s Int) -> (Int,NewickTree dec) -> Par d s ()
     build acc (ix,hd) = do
       let bips = allBips hd 
           fn bip = IM.modify acc bip (IS.putInSet ix)
       F.traverse_ fn bips
-          -- acc' = S.foldl' fn acc bips
-          -- fn acc bip = M.alter fn2 bip acc
-          -- fn2 (Just membs) = Just (markLabel ix membs)
-          -- fn2 Nothing      = Just (mkSingleDense num_taxa ix)
---      build acc tl
 
     -- Second, ingest the table to construct the distance matrix:
-    ingest :: M.Map DenseLabelSet DenseLabelSet -> DistanceMatrix
+    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> DistanceMatrix
     ingest bipTable = runST theST
       where
        theST :: forall s0 . ST s0 DistanceMatrix
@@ -296,7 +292,7 @@ hashRF num_taxa trees = do
                           elm <- MU.read row j
                           MU.write row j (elm+1)
                           return ()
-            fn bipMembs =
+            fn (IS.ISetSnap bipMembs) =
               -- Here we quadratically consider all pairs of trees and ask whether
               -- their edit distance is increased based on this particular BiP.
               -- Actually, as an optimization, it is sufficient to consider only the
@@ -304,15 +300,38 @@ hashRF num_taxa trees = do
               let haveIt   = bipMembs
                   -- Depending on how invertDense is written, it could be useful to
                   -- fuse this in and deforest "dontHave".
-                  dontHave = invertDense num_trees bipMembs
-                  fn1 trId = traverseDense_ (fn2 trId) dontHave
+                  dontHave = invertDense2 num_trees bipMembs
+                  fn1 trId = traverseDense_2 (fn2 trId) dontHave
                   fn2 trId1 trId2 = bumpMatr trId1 trId2
               in
 --                 trace ("Computed donthave "++ show dontHave) $ 
-                 traverseDense_ fn1 haveIt
+                 traverseDense_2 fn1 haveIt
         F.traverse_ fn bipTable
         v1 <- V.unsafeFreeze matr
         T.traverse (U.unsafeFreeze) v1
+
+-- TEMPORARY:
+--------------------------------------------------------------------------------
+type DenseLabelSet2 = S.Set Int
+markLabel2 lab set   = S.insert lab set 
+mkEmptyDense2 _size  = S.empty
+mkSingleDense2 _size = S.singleton
+denseUnions2 _size   = S.unions 
+bipSize2             = S.size
+denseDiff2    a b    = S.difference a b
+denseIsSubset2 a b   = S.isSubsetOf a b
+
+dispBip2 labs bip = "[" ++ unwords strs ++ "]"
+  where strs = map (labs M.!) $ S.toList bip
+invertDense2 size bip = loop S.empty (size-1)
+  where -- There's nothing for it but to iterate and test for membership:
+    loop !acc ix | ix < 0           = acc
+                 | S.member ix bip = loop acc (ix-1)
+                 | otherwise        = loop (S.insert ix acc) (ix-1)
+traverseDense_2 fn bip =
+  -- FIXME: need guaranteed non-allocating way to do this.
+  S.foldr' (\ix acc ->  fn ix >> acc) (return ()) bip
+--------------------------------------------------------------------------------
 
 
 #if 0
@@ -442,4 +461,6 @@ bipsToTree num_taxa origbip =
          -- Here all subtrees that match the current bip get merged:
          loop ((denseUnions num_taxa (map fst in_),
                 NTInterior ()        (map snd in_)) : out) tl
+
+
 
