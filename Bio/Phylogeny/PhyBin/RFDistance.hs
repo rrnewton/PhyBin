@@ -241,21 +241,34 @@ type TreeID = AnnotatedTree
 -- | This version slices the problem a different way.  A single pass over the trees
 -- populates the table of bipartitions.  Then the table can be processed (locally) to
 -- produce (non-localized) increments to a distance matrix.
-hashRF :: Int -> [NewickTree a] -> IO DistanceMatrix
-hashRF num_taxa trees =
-    runParIO (build M.empty (zip [0..] trees))
+hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix
+hashRF num_taxa trees = do 
+    bigtable <- getBigtable
+    return (error "FINISH")
   where
+    getBigtable :: IO (Snapshot (IMap DenseLabelSet) (Snapshot IS.ISet Int))
+    getBigtable = runParThenFreezeIO par
+
+    par :: forall d s . Par d s (IMap DenseLabelSet s (IS.ISet s Int))
+    par =  do themp <- newEmptyMap
+--              build themp (zip [0..] trees)
+              mapM_ (build themp) (zip [0..] trees)
+              return themp
     num_trees = length trees
     -- First build the table:
-    build acc [] = return$ ingest acc
-    build acc ((ix,hd):tl) = 
-      let bips = allBips hd
-          acc' = S.foldl' fn acc bips
-          fn acc bip = M.alter fn2 bip acc
-          fn2 (Just membs) = Just (markLabel ix membs)
-          fn2 Nothing      = Just (mkSingleDense num_taxa ix)
-      in      
-      build acc' tl
+--    build :: M.Map DenseLabelSet DenseLabelSet -> [(Int,NewickTree dec)] -> Par d s DistanceMatrix
+--     build :: IMap DenseLabelSet s DenseLabelSet -> [(Int,NewickTree dec)] -> Par d s DistanceMatrix
+--    build :: IMap DenseLabelSet s (IS.ISet s Int) -> [(Int,NewickTree dec)] -> Par d s DistanceMatrix
+    build :: IMap DenseLabelSet s (IS.ISet s Int) -> (Int,NewickTree dec) -> Par d s ()
+    build acc (ix,hd) = do
+      let bips = allBips hd 
+          fn bip = IM.modify acc bip (IS.putInSet ix)
+      F.traverse_ fn bips
+          -- acc' = S.foldl' fn acc bips
+          -- fn acc bip = M.alter fn2 bip acc
+          -- fn2 (Just membs) = Just (markLabel ix membs)
+          -- fn2 Nothing      = Just (mkSingleDense num_taxa ix)
+--      build acc tl
 
     -- Second, ingest the table to construct the distance matrix:
     ingest :: M.Map DenseLabelSet DenseLabelSet -> DistanceMatrix
