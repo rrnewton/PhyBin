@@ -70,51 +70,60 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
 -- | Some duplicated code with dotNewickTree.
 dotDendrogram :: String -> Double -> C.Dendrogram (FullTree a) -> Maybe (M.Map TreeName Int) -> Gv.DotGraph G.Node
 dotDendrogram title edge_scale origDendro mNameMap =
-  Gv.graphToDot myparams graph
+  Gv.graphToDot myparams (G.nmap snd graph)
  where
   (charsDropped, dendro) = truncateNames origDendro
   -- This is ugly, but we modify the name map to match:
-  nameMap' = fmap (M.mapKeys (drop charsDropped)) mNameMap
-    
---  graph :: G.Gr (Either String String) Double
-  graph :: G.Gr String Double   
+  nameMap' = fmap (M.mapKeys (drop charsDropped)) mNameMap  
+  graph :: DendroGraph
   graph = dendrogramToGraph dendro
+
+  uidsToNames = M.fromList $
+                map ((\(x,y)->(y,x)) . fromJust . G.lab graph) $
+                G.nodes graph
+
   myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
                                 Gv.fmtNode= nodeAttrs,
                                 Gv.fmtEdge= edgeAttrs
                               }
 --  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
-  nodeAttrs :: (Int, TreeName) -> [GA.Attribute]
-  nodeAttrs (_num, trName) =
-    let (tag,shp) = -- case eith of
-          -- Left treename -> (take 60 treename, GA.Ellipse)
-          -- Right _       -> ("", GA.PointShape)
-          if isPrefixOf "DUMMY_" trName
+  nodeAttrs :: (Int, UniqueNodeName) -> [GA.Attribute]
+  nodeAttrs (_num, uid) =
+    let trName = uidsToNames M.! uid
+        (tag,shp) = -- case eith of
+          if isPrefixOf "DUMMY_" uid
           then ("", GA.PointShape)          
-          else (trName, GA.Ellipse)
+          else (uid, GA.Ellipse)
+          -- case trName of
+          --   Nothing     -> ("", GA.PointShape)
+          --   Just trName -> (trName, GA.Ellipse)
     in 
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
     , GA.Style [GA.SItem GA.Filled []]
     ]
     ++
-    case nameMap' of
-      Nothing -> []
-      Just nm -> case M.lookup trName nm of
-                   Nothing -> []
-                   -- Here we color the top TEN clusters:
-                   -- TODO: How do we get the CLUSTERS!
-                   Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
-                            | otherwise -> []
+    case (nameMap',trName) of
+      (Nothing,_) -> []
+      (_,Nothing) -> []      
+      (Just nm, Just trN) ->
+        case M.lookup trN nm of
+          Nothing -> []
+          -- Here we color the top TEN clusters:
+          Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
+                   | otherwise -> []
   edgeAttrs = getEdgeAttrs edge_scale
 
 
+type UniqueNodeName = String
+type DendroGraph = G.Gr (Maybe TreeName,UniqueNodeName) Double
+
 -- | Create a graph using TreeNames for node labels and edit-distance for edge labels.
-dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr String Double
+dendrogramToGraph :: C.Dendrogram (FullTree a) -> DendroGraph
 dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
   where
- loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM treename
+ loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (Just treename, treename)
  loop node@(C.Branch 0 left right) = do
    -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
    ----------------------------------------
@@ -127,18 +136,17 @@ dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
        -- goal: avg * perline == total / (avg * perline)
        perline = ceiling$ sqrt (fromIntegral total / ((fromIntegral avg)^2))
        chunked = chunksOf perline nms
-       name = unlines (map unwords chunked)
-   G.insMapNodeM name
+       fatname = unlines (map unwords chunked)
+   G.insMapNodeM (Just (head nms), fatname)
    ----------------------------------------   
  loop node@(C.Branch dist left right) =
-    do (_,l) <- loop left
-       (_,r) <- loop right
+    do (_,ll@(_,lid)) <- loop left
+       (_,rr@(_,rid)) <- loop right
        -- Interior nodes do NOT have their names drawn:
-       let ndname = "DUMMY_"++(l++"_"++r)  -- HACK!
-                    -- Right (deEither l ++"_"++ deEither r)
-       (midN,mid) <- G.insMapNodeM ndname
-       G.insMapEdgeM (l, mid, dist)
-       G.insMapEdgeM (r, mid, dist)
+       let ndname = "DUMMY_"++(lid++"_"++rid)  -- HACK!
+       (midN,mid) <- G.insMapNodeM (Nothing,ndname)
+       G.insMapEdgeM (ll, mid, dist)
+       G.insMapEdgeM (rr, mid, dist)
        return (midN,mid)
 
  collapseZeroes (C.Leaf tr)      = [tr]
