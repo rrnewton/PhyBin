@@ -68,9 +68,9 @@ wait  = Async.wait
 
 -- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
-driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
-            do_graph, branch_collapse_thresh,
-            dist_thresh, clust_mode, use_hashrf, print_rfmatrix } =
+driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
+                do_graph, branch_collapse_thresh,
+                dist_thresh, clust_mode, use_hashrf, print_rfmatrix } =
    -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
@@ -183,7 +183,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
               if True -- do_graph
               then async (do 
                 t0 <- getCurrentTime
-                let dot = dotDendrogram "dendrogram" 1.0 dendro mnameMap
+                let dot = dotDendrogram cfg "dendrogram" 1.0 dendro mnameMap
                 _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
                 t1 <- getCurrentTime          
                 putStrLn$ " [finished] Wrote dendrogram diagram to file dendrogram.pdf ("

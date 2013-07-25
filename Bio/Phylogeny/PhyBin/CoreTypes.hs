@@ -85,6 +85,9 @@ instance Foldable NewickTree where
 instance Foldable FullTree where
   foldMap f (FullTree _ _ tr) = foldMap f tr
 
+instance Functor FullTree where
+  fmap f (FullTree n l tr) = FullTree n l $ fmap f tr
+
 instance Pretty dec => Pretty (NewickTree dec) where 
  -- I'm using displayDefaultTree for the "prettiest" printing and
  -- replacing pPrint with a whitespace-improved version of show:
@@ -184,7 +187,7 @@ data FullTree a =
            , labelTable :: LabelTable
            , nwtree     :: NewickTree a 
            }
- deriving (Show)
+ deriving (Show, Ord, Eq)
 
 liftFT :: (NewickTree t -> NewickTree a) -> FullTree t -> FullTree a
 liftFT fn (FullTree nm labs x) = FullTree nm labs (fn x)

@@ -68,9 +68,9 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
  ----------------------------------------------------------------------------------------------------
 
 -- | Some duplicated code with dotNewickTree.
-dotDendrogram :: String -> Double -> C.Dendrogram (FullTree a) -> Maybe (M.Map TreeName Int) -> Gv.DotGraph G.Node
-dotDendrogram title edge_scale origDendro mNameMap =
-  Gv.graphToDot myparams (G.nmap snd graph)
+dotDendrogram :: PhyBinConfig -> String -> Double -> C.Dendrogram (FullTree a) -> Maybe (M.Map TreeName Int) -> Gv.DotGraph G.Node
+dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro mNameMap  =
+  Gv.graphToDot myparams (G.nmap uid graph)
  where
   (charsDropped, dendro) = truncateNames origDendro
   -- This is ugly, but we modify the name map to match:
@@ -79,7 +79,7 @@ dotDendrogram title edge_scale origDendro mNameMap =
   graph = dendrogramToGraph dendro
 
   uidsToNames = M.fromList $
-                map ((\(x,y)->(y,x)) . fromJust . G.lab graph) $
+                map ((\NdLabel{uid,tre}->(uid,fmap treename tre)) . fromJust . G.lab graph) $
                 G.nodes graph
 
   myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
@@ -117,13 +117,25 @@ dotDendrogram title edge_scale origDendro mNameMap =
 
 
 type UniqueNodeName = String
-type DendroGraph = G.Gr (Maybe TreeName,UniqueNodeName) Double
+-- type DendroGraph = G.Gr (Maybe TreeName,UniqueNodeName) Double
+type DendroGraph = G.Gr NdLabel Double
+
+-- | When we first convert to a graph representation, there is a bunch of information
+-- hanging off of each node.
+data NdLabel =
+  NdLabel
+  { uid  :: UniqueNodeName
+  , tre :: Maybe (FullTree ())
+  }
+  deriving (Show, Ord, Eq)
 
 -- | Create a graph using TreeNames for node labels and edit-distance for edge labels.
 dendrogramToGraph :: C.Dendrogram (FullTree a) -> DendroGraph
-dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
+dendrogramToGraph orig =
+  G.run_ G.empty $ void$
+    loop (fmap (fmap (const())) orig)
   where
- loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (Just treename, treename)
+ loop node@(C.Leaf ft) = G.insMapNodeM (NdLabel (treename ft) (Just$ fmap (const()) ft))
  loop node@(C.Branch 0 left right) = do
    -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
    ----------------------------------------
@@ -137,14 +149,14 @@ dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
        perline = ceiling$ sqrt (fromIntegral total / ((fromIntegral avg)^2))
        chunked = chunksOf perline nms
        fatname = unlines (map unwords chunked)
-   G.insMapNodeM (Just (head nms), fatname)
+   G.insMapNodeM (NdLabel fatname (Just (head lvs)))
    ----------------------------------------   
  loop node@(C.Branch dist left right) =
-    do (_,ll@(_,lid)) <- loop left
-       (_,rr@(_,rid)) <- loop right
+    do (_,ll@(NdLabel lid _)) <- loop left
+       (_,rr@(NdLabel rid _)) <- loop right
        -- Interior nodes do NOT have their names drawn:
        let ndname = "DUMMY_"++(lid++"_"++rid)  -- HACK!
-       (midN,mid) <- G.insMapNodeM (Nothing,ndname)
+       (midN,mid) <- G.insMapNodeM (NdLabel ndname Nothing)
        G.insMapEdgeM (ll, mid, dist)
        G.insMapEdgeM (rr, mid, dist)
        return (midN,mid)
