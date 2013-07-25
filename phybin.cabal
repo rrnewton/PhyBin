@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.2.7
+Version:        0.2.8
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -17,6 +17,7 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 -- 0.2.4 -- add consensus trees
 -- 0.2.6 -- colorization, hashrf, misc improvements
 -- 0.2.7 -- Add command line opt --showtrees
+-- 0.2.8 -- Add command line opt --highlight
 
 -- homepage: http://code.haskell.org/phybin
 -- homepage: http://people.csail.mit.edu/newton/phybin/

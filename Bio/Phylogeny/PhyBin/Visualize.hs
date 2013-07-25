@@ -28,6 +28,7 @@ import           Data.GraphViz.Attributes.Colors   (Color(RGB))
 import qualified Data.Clustering.Hierarchical as C
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
+import           Bio.Phylogeny.PhyBin.RFDistance (filterCompatible, compatibleWith)
 
 ----------------------------------------------------------------------------------------------------
 -- Visualization with GraphViz and FGL:
@@ -68,8 +69,10 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
  ----------------------------------------------------------------------------------------------------
 
 -- | Some duplicated code with dotNewickTree.
-dotDendrogram :: PhyBinConfig -> String -> Double -> C.Dendrogram (FullTree a) -> Maybe (M.Map TreeName Int) -> Gv.DotGraph G.Node
-dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro mNameMap  =
+dotDendrogram :: PhyBinConfig -> String -> Double -> C.Dendrogram (FullTree a) ->
+                 Maybe (M.Map TreeName Int) -> [[NewickTree ()]] -> Gv.DotGraph G.Node
+dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
+              mNameMap highlightTrs =
   Gv.graphToDot myparams (G.nmap uid graph)
  where
   (charsDropped, dendro) = truncateNames origDendro
@@ -79,10 +82,27 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
   graph = dendrogramToGraph dendro
 
   uidsToNames = M.fromList $
-                map (\NdLabel{uid,tre=Just t,clumpSize} -> (uid,(t,clumpSize))) $ 
+                map (\NdLabel{uid,tre=Just t,clumpSize} -> (uid,(t,clumpSize))) $
                 filter (isJust . tre) $ 
                 map (fromJust . G.lab graph) $  
                 G.nodes graph
+
+  matchers = map mkMatcher highlightTrs
+  mkMatcher ls = let fns = map compatibleWith ls -- Multiple predicate functions
+                 in \ tr -> -- Does it match any predicate?
+                    or$ map (\f -> f tr) fns 
+  
+  wcolors = zip matchers defaultPalette
+  findColor tr = loop wcolors
+    where loop [] = Nothing
+          loop ((f,col):rst) | f tr = Just col
+                             | otherwise = loop rst
+  
+  -- Map uids to highlight color
+  highlightMap = M.map fromJust $
+                 M.filter isJust $
+                 M.map (\ (FullTree{treename,nwtree},_) -> findColor nwtree)
+                 uidsToNames
 
   myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
@@ -102,20 +122,27 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
         (tag,shp) = -- case eith of
           if isPrefixOf "DUMMY_" uid
           then ("", GA.PointShape)          
-          else (uid', GA.Ellipse)
+          else (uid', GA.Ellipse)          
+        highlightColor = 
+          case M.lookup uid highlightMap of
+            Nothing  -> []
+            Just col -> [ GA.Color [weighted col ] ]
+        clustColor | not (null highlightTrs) = []
+                   | otherwise = 
+          case (nameMap', M.lookup uid uidsToNames) of
+            (Just nm, Just (FullTree{treename=trN},_)) ->
+              case M.lookup trN nm of
+                Nothing -> []
+                -- Here we color the top TEN clusters:
+                Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPaletteV V.! (ind-1) ] ]
+                         | otherwise -> []
+            _ -> []
     in 
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
     , GA.Style [GA.SItem GA.Filled []]
-    ] ++
-    case (nameMap', M.lookup uid uidsToNames) of
-      (Just nm, Just (FullTree{treename=trN},_)) ->
-        case M.lookup trN nm of
-          Nothing -> []
-          -- Here we color the top TEN clusters:
-          Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
-                   | otherwise -> []
-      _ -> []
+    ] ++ highlightColor ++ clustColor
+
   edgeAttrs = getEdgeAttrs edge_scale
 
 
@@ -245,8 +272,11 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
 
 
 -- | Some arbitrarily chosen colors from the X11 set:
-defaultPalette :: V.Vector GA.Color
-defaultPalette = V.fromList$ concat$ replicate 4 $ map GA.X11Color 
+defaultPaletteV :: V.Vector GA.Color
+defaultPaletteV = V.fromList defaultPalette
+
+defaultPalette :: [GA.Color]
+defaultPalette = concat$ replicate 4 $ map GA.X11Color 
   [ Gv.Aquamarine
   , Gv.PaleVioletRed
   , Gv.MediumPurple

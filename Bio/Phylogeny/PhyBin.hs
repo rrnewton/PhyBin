@@ -74,7 +74,7 @@ data DendroPlus a = DPLeaf (FullTree a)
 -- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
 driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
-                do_graph, branch_collapse_thresh,
+                do_graph, branch_collapse_thresh, highlights, 
                 dist_thresh, clust_mode, use_hashrf, print_rfmatrix } =
    -- Unused: do_draw
  do 
@@ -113,7 +113,16 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let num_files = length goodFiles
     bstrs <- mapM B.readFile goodFiles
     let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
-        
+
+        parseHighlight file = do 
+          bs <- B.readFile file
+          let (lt2,htr) = parseNewick labelTab name_hack file bs
+          unless (lt2 == labelTab) $
+            error$"Tree given as --highlight includes taxa not present in main tree set: "++
+                  show(M.keys$ M.difference lt2 labelTab)            
+          return (map (fmap (const())) htr)
+    highlightTrs <- mapM parseHighlight highlights
+    
     putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++
 	      (unwords$ M.elems labelTab)
 --	      show (nest 2 $ sep $ map text $ M.elems labelTab)    
@@ -188,7 +197,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
               if True -- do_graph
               then async (do 
                 t0 <- getCurrentTime
-                let dot = dotDendrogram cfg "dendrogram" 1.0 dendro mnameMap
+                let dot = dotDendrogram cfg "dendrogram" 1.0 dendro mnameMap highlightTrs
                 _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
                 t1 <- getCurrentTime          
                 putStrLn$ " [finished] Wrote dendrogram diagram to file dendrogram.pdf ("

@@ -7,7 +7,7 @@ module Bio.Phylogeny.PhyBin.RFDistance
 
          -- * Bipartition (Bip) utilities
          allBips, foldBips, dispBip,
-         consensusTree, bipsToTree,
+         consensusTree, bipsToTree, filterCompatible, compatibleWith,
 
          -- * ADT for dense sets
          mkSingleDense, mkEmptyDense, bipSize,
@@ -361,7 +361,20 @@ for_ (start, end) fn = loop start
   where
    loop !i | i == end  = return ()
            | otherwise = do fn i; loop (i+1)
-  
+
+-- | Which of a set of trees are compatible with a consensus?
+filterCompatible :: NewickTree a -> [NewickTree b] -> [NewickTree b]
+filterCompatible consensus trees =
+    let cbips = allBips consensus in
+    [ tr | tr <- trees
+         , cbips `S.isSubsetOf` allBips tr ]
+
+-- | Is a tree compatible with a consensus?
+--   This is more efficient if partially applied then used repeatedly.
+compatibleWith :: NewickTree a -> NewickTree b -> Bool
+compatibleWith consensus newTr =
+  S.isSubsetOf (allBips consensus) (allBips newTr)
+
 -- Consensus between two trees, which may even have different label maps.
 consensusTreeFull (FullTree n1 l1 t1) (FullTree n2 l2 t2) =
   error "FINISHME - consensusTreeFull"
