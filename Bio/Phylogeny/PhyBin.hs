@@ -276,10 +276,10 @@ doCluster use_hashrf num_taxa linkage validtrees = do
   when use_hashrf$ putStrLn " Using HashRF-style algorithm..."
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees
-      mat = if use_hashrf 
-            then hashRF num_taxa nwtrees
-            else fst (distanceMatrix nwtrees)
-      ixtrees  = zip [0..] validtrees
+  mat <- if use_hashrf 
+         then hashRF num_taxa nwtrees
+         else return (fst (distanceMatrix nwtrees))
+  let ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
 --                         | i == numtrees-1 = 0 
                          | j < i      = fromIntegral ((mat V.! i) U.! j)

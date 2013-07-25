@@ -34,12 +34,11 @@ import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           System.IO.Unsafe
 
--- import           Control.LVish
--- import qualified Data.LVar.Set   as IS
--- import qualified Data.LVar.SLSet as SL
-
--- import           Data.LVar.Map   as IM
--- import           Data.LVar.NatArray as NA
+import           Control.LVish hiding (for_)
+import qualified Data.LVar.Set   as IS
+import qualified Data.LVar.SLSet as SL
+import           Data.LVar.Map   as IM
+import           Data.LVar.NatArray as NA
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
 -- import           Data.BitList
@@ -242,13 +241,14 @@ type TreeID = AnnotatedTree
 -- | This version slices the problem a different way.  A single pass over the trees
 -- populates the table of bipartitions.  Then the table can be processed (locally) to
 -- produce (non-localized) increments to a distance matrix.
-hashRF :: Int -> [NewickTree a] -> DistanceMatrix
-hashRF num_taxa trees = build M.empty (zip [0..] trees)
+hashRF :: Int -> [NewickTree a] -> IO DistanceMatrix
+hashRF num_taxa trees =
+    runParIO (build M.empty (zip [0..] trees))
   where
     num_trees = length trees
     -- First build the table:
-    build acc [] = ingest acc
-    build acc ((ix,hd):tl) =
+    build acc [] = return$ ingest acc
+    build acc ((ix,hd):tl) = 
       let bips = allBips hd
           acc' = S.foldl' fn acc bips
           fn acc bip = M.alter fn2 bip acc
