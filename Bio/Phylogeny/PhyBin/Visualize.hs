@@ -11,7 +11,7 @@ module Bio.Phylogeny.PhyBin.Visualize
 import           Text.Printf        (printf)
 import           Data.List          (elemIndex, isPrefixOf)
 import           Data.List.Split    (chunksOf)
-import           Data.Maybe         (fromJust)
+import           Data.Maybe         (fromJust, isJust)
 import qualified Data.Map           as M
 import qualified Data.Set           as S
 import qualified Data.Vector        as V
@@ -79,7 +79,9 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
   graph = dendrogramToGraph dendro
 
   uidsToNames = M.fromList $
-                map ((\NdLabel{uid,tre}->(uid,fmap treename tre)) . fromJust . G.lab graph) $
+                map (\NdLabel{uid,tre=Just t} -> (uid,t)) $ 
+                filter (isJust . tre) $ 
+                map (fromJust . G.lab graph) $  
                 G.nodes graph
 
   myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
@@ -87,32 +89,32 @@ dotDendrogram PBC{highlights, show_trees_in_dendro} title edge_scale origDendro 
                                 Gv.fmtNode= nodeAttrs,
                                 Gv.fmtEdge= edgeAttrs
                               }
---  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
   nodeAttrs :: (Int, UniqueNodeName) -> [GA.Attribute]
   nodeAttrs (_num, uid) =
-    let trName = uidsToNames M.! uid
+    let uid' = if show_trees_in_dendro
+               then printed_tree++"\n"++uid
+               else uid
+        printed_tree =
+          case M.lookup uid uidsToNames of
+            Nothing -> ""
+            Just ft -> show (displayStrippedTree ft)
         (tag,shp) = -- case eith of
           if isPrefixOf "DUMMY_" uid
           then ("", GA.PointShape)          
-          else (uid, GA.Ellipse)
-          -- case trName of
-          --   Nothing     -> ("", GA.PointShape)
-          --   Just trName -> (trName, GA.Ellipse)
+          else (uid', GA.Ellipse)
     in 
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
     , GA.Style [GA.SItem GA.Filled []]
-    ]
-    ++
-    case (nameMap',trName) of
-      (Nothing,_) -> []
-      (_,Nothing) -> []      
-      (Just nm, Just trN) ->
+    ] ++
+    case (nameMap', M.lookup uid uidsToNames) of
+      (Just nm, Just (FullTree{treename=trN})) ->
         case M.lookup trN nm of
           Nothing -> []
           -- Here we color the top TEN clusters:
           Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
                    | otherwise -> []
+      _ -> []
   edgeAttrs = getEdgeAttrs edge_scale
 
 
