@@ -53,7 +53,7 @@ data Flag
     | TabDelimited Int Int
 
     | Highlight FilePath
-    | ShowTreesInDendro
+    | ShowTreesInDendro | ShowInterior
 
     | HashRF Bool
     | SelfTest
@@ -97,7 +97,7 @@ options =
      , Option []    ["UPGMA"]    (NoArg$ Cluster C.UPGMA)          $  "Use Unweighted Pair Group Method (average linkage)"
 
      , Option []    ["editdist"]  (ReqArg (EditDistThresh . read) "DIST")$
-                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters."                                  
+                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters."  
      , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
 
      , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
@@ -118,7 +118,9 @@ options =
      , Option [] ["highlight"] (ReqArg Highlight "FILE") $ 
            "Highlight nodes in the tree-of-trees (dendrogram) consistent with the.\n"++
            "given tree file.  Multiple highlights are permitted and use different colors."
-       
+     , Option [] ["interior"] (NoArg ShowInterior)
+          "Show the consensus trees for interior nodes in the dendogram, rather than just points."
+           
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "---------------------------- Tree pre-processing -----------------------------"
 
@@ -224,6 +226,7 @@ main =
      	   RFMatrix -> return cfg { print_rfmatrix= True }
 
            ShowTreesInDendro -> return cfg { show_trees_in_dendro = True }
+           ShowInterior      -> return cfg { show_interior_consensus = True }
            Highlight path    -> return cfg { highlights = path : highlights cfg }
      
            LineSetDiffMode -> do

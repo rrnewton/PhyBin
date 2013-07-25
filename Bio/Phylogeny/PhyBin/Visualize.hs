@@ -71,8 +71,8 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
 -- | Some duplicated code with dotNewickTree.
 dotDendrogram :: PhyBinConfig -> String -> Double -> C.Dendrogram (FullTree a) ->
                  Maybe (M.Map TreeName Int) -> [[NewickTree ()]] -> Gv.DotGraph G.Node
-dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
-              mNameMap highlightTrs =
+dotDendrogram PBC{show_trees_in_dendro, show_interior_consensus}
+              title edge_scale origDendro mNameMap highlightTrs =
   Gv.graphToDot myparams (G.nmap uid graph)
  where
   (charsDropped, dendro) = truncateNames origDendro
@@ -128,15 +128,14 @@ dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
               ++ show (displayStrippedTree (FullTree "" labelTable consensus))
         (tag,shp,styl) = -- case eith of
           if isPrefixOf "DUMMY_" uid
-          then (if show_trees_in_dendro
+          then (if show_trees_in_dendro && show_interior_consensus
                 then printed_tree else "",
-                -- GA.PointShape
-                -- GA.Ellipse,
-                GA.PlainText,
-                [] -- [GA.SItem GA.Invisible []]
-                -- [ GA.Color [weighted$ GA.X11Color Gv.Transparent] ]
+                if show_interior_consensus
+                then GA.BoxShape -- GA.PlainText
+                else GA.PointShape,
+                [ GA.Color [weighted$ GA.X11Color Gv.Transparent] ]
                )
-          else (uid', GA.Ellipse, [GA.SItem GA.Filled []])
+          else (uid', GA.Ellipse, [ GA.Style [GA.SItem GA.Filled []]])
         highlightColor = 
           case M.lookup uid highlightMap of
             Nothing  -> []
@@ -155,8 +154,7 @@ dotDendrogram PBC{show_trees_in_dendro} title edge_scale origDendro
     in 
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
-    , GA.Style styl
-    ] ++ highlightColor ++ clustColor
+    ] ++ styl ++ highlightColor ++ clustColor
 
   edgeAttrs = getEdgeAttrs edge_scale
 

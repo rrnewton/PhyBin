@@ -217,6 +217,7 @@ data PhyBinConfig =
       , clust_mode  :: ClustMode
       , highlights  :: [FilePath] -- [FullTree ()]
       , show_trees_in_dendro :: Bool
+      , show_interior_consensus :: Bool
       , use_hashrf  :: Bool  
       , print_rfmatrix :: Bool
       , dist_thresh :: Maybe Int
@@ -241,6 +242,7 @@ default_phybin_config =
 #endif
       , highlights     = []
       , show_trees_in_dendro = False
+      , show_interior_consensus = False
       , print_rfmatrix = False
       , dist_thresh = Nothing
       , branch_collapse_thresh = Nothing
