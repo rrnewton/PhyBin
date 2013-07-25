@@ -11,7 +11,7 @@ module Bio.Phylogeny.PhyBin.RFDistance
 
          -- * ADT for dense sets
          mkSingleDense, mkEmptyDense, bipSize,
-         denseUnions, denseDiff, invertDense, dispBip, markLabel,
+         denseUnions, denseDiff, invertDense, markLabel,
          
         -- * Methods for computing distance matrices
         distanceMatrix, hashRF, 
@@ -300,7 +300,7 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
                  traverseDense_ fn1 haveIt
         F.traverse_ fn bipTable
         v1 <- V.unsafeFreeze matr
-        T.traverse U.unsafeFreeze v1
+        T.traverse (fmap (U.map (`quot` 2)) . U.unsafeFreeze) v1
 
 
 
