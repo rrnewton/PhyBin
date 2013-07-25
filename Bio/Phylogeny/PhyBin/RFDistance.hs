@@ -362,6 +362,9 @@ for_ (start, end) fn = loop start
    loop !i | i == end  = return ()
            | otherwise = do fn i; loop (i+1)
   
+-- Consensus between two trees, which may even have different label maps.
+consensusTreeFull (FullTree n1 l1 t1) (FullTree n2 l2 t2) =
+  error "FINISHME - consensusTreeFull"
 
 -- | Take only the bipartitions that are agreed on by all trees.
 consensusTree :: Int -> [NewickTree a] -> NewickTree ()

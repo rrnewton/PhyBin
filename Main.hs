@@ -52,6 +52,9 @@ data Flag
     | View
     | TabDelimited Int Int
 
+    | Highlight FilePath
+    | ShowTreesInDendro
+
     | HashRF Bool
     | SelfTest
     | RFMatrix | LineSetDiffMode | PrintNorms | PrintReg
@@ -110,6 +113,11 @@ options =
 
      , Option ['w']     ["view"]    (NoArg View)$  "for convenience, \"view mode\" simply displays input Newick files without binning" 
 
+     , Option [] ["showtrees"] (NoArg ShowTreesInDendro)  "Print (textual) tree topology inside the nodes of the dendrogram"
+     , Option [] ["highlight"] (ReqArg Highlight "FILE") $ 
+           "Highlight nodes in the tree-of-trees (dendrogram) consistent with the.\n"++
+           "given tree file.  Multiple highlights are permitted and use different colors."
+       
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "---------------------------- Tree pre-processing -----------------------------"
 
@@ -213,6 +221,9 @@ main =
 
      	   RFMatrix -> return cfg { print_rfmatrix= True }
 
+           ShowTreesInDendro -> return cfg { show_trees_in_dendro = True }
+           Highlight path    -> return cfg { highlights = path : highlights cfg }
+     
            LineSetDiffMode -> do
              bss <- mapM B.readFile files
              case map (S.fromList . B.lines) bss of

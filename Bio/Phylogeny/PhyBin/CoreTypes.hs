@@ -212,6 +212,8 @@ data PhyBinConfig =
       , do_graph :: Bool
       , do_draw :: Bool
       , clust_mode  :: ClustMode
+      , highlights  :: [FilePath] -- [FullTree ()]
+      , show_trees_in_dendro :: Bool
       , use_hashrf  :: Bool  
       , print_rfmatrix :: Bool
       , dist_thresh :: Maybe Int
@@ -234,6 +236,8 @@ default_phybin_config =
 #else
       , use_hashrf = False
 #endif
+      , highlights     = []
+      , show_trees_in_dendro = False
       , print_rfmatrix = False
       , dist_thresh = Nothing
       , branch_collapse_thresh = Nothing
