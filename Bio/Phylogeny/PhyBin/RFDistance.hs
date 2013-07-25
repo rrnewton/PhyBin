@@ -92,6 +92,14 @@ invertDense size bip = UB.invert bip
 dispBip labs bip = show$ map (\(ix,_) -> (labs M.! ix)) $
                         filter (\(_,bit) -> B.toBool bit) $
                         zip [0..] (UB.toList bip)
+denseIsSubset a b = UB.or (UB.difference b a)
+traverseDense_ fn bip =
+  U.ifoldr' (\ ix bit acc ->
+              (if B.toBool bit
+               then fn ix
+               else return ()) >> acc)
+        (return ()) bip
+
 #  else
 -- TODO: try tracking the size:
 data DenseLabelSet = DLS {-# UNPACK #-} !Int (UB.Vector B.Bit)
@@ -107,6 +115,7 @@ mkSingleDense _size = SI.singleton
 denseUnions _size   = SI.unions 
 bipSize             = SI.size
 denseDiff           = SI.difference
+denseIsSubset       = SI.isSubsetOf
 
 dispBip labs bip = "[" ++ unwords strs ++ "]"
   where strs = map (labs M.!) $ SI.toList bip
@@ -118,7 +127,6 @@ invertDense size bip = loop SI.empty (size-1)
 traverseDense_ fn bip =
   -- FIXME: need guaranteed non-allocating way to do this.
   SI.foldr' (\ix acc ->  fn ix >> acc) (return ()) bip
-
 #endif
 
 markLabel    :: Label -> DenseLabelSet -> DenseLabelSet
@@ -398,7 +406,7 @@ bipsToTree num_taxa bip =
         [(_,one)] -> one
         lst   -> NTInterior () (map snd lst)
     loop !subtrees (bip:tl) =
-      let (in_,out) = L.partition ((`SI.isSubsetOf` bip) . fst) subtrees in
+      let (in_,out) = L.partition ((denseIsSubset bip) . fst) subtrees in
       -- Here all subtrees that match the current bip get merged:
       loop ((denseUnions num_taxa (map fst in_),
              NTInterior ()        (map snd in_)) : out) tl

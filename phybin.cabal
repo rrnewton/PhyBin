@@ -43,7 +43,11 @@ Source-repository head
   location: git://github.com/rrnewton/PhyBin.git
 
 Flag hashrf
-  description: Use the HashRF algorithm instead of the naive one.
+  description: Use the HashRF algorithm by default instead of the naive one.
+  default: False
+
+Flag bitvec
+  description: Use bitvectors rather than IntSets for bipartitions.
   default: False
 
 Library
@@ -71,6 +75,8 @@ Library
 
   if flag(hashrf)
      CPP-Options: -DUSE_HASHRF
+  if flag(bitvec)
+     CPP-Options: -DBITVEC_BIPS
 
 Executable phybin
   Main-is:           Main.hs
@@ -92,3 +98,5 @@ Executable phybin
 
   if flag(hashrf)
      CPP-Options: -DUSE_HASHRF
+  if flag(bitvec)
+     CPP-Options: -DBITVEC_BIPS
