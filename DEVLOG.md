@@ -116,3 +116,25 @@ Productivities are high in both cases.
 
 Oops... there was a bug in bipSize.  I'm surprised it was getting the
 right answer.  Fixing that brought it down to 39G alloc, 12.3s.
+Stil, bit vectors are NOT a win for the direct/simple N^2 version.
+
+
+[2013.07.25] {Comparison ogainst HashRF}
+----------------------------------------
+
+Note that HashRF doesn't have very good error messages.  For example,
+if given our messy data with sum trees missing taxa:
+
+    ./hashrf Wolbachia/all_trees.tr 928
+
+    *** Collecting the taxon labels ***
+	Number of taxa = 10
+
+    *** Reading tree file and collecting bipartitions ***
+    libc++abi.dylib: terminate called throwing an exception
+    Abort trap: 6
+
+In fact... even if I use phybin to prune out the 503 trees with 10
+taxa, I still get the error.
+
+

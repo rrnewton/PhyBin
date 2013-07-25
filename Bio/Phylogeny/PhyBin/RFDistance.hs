@@ -162,11 +162,11 @@ distanceMatrix lst =
                  diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
                  (q,rem) = (diff1 + diff2) `quotRem` 2
 #            ifdef NORMALIZATION          
-             in 
-               if rem==0
-               then q
-               else -- trace "Warning, when dividing symmetric difference by two, there was a remainder!"
-                    q
+             in q + rem
+               -- if rem==0
+               -- then q
+               -- else -- trace "Warning, when dividing symmetric difference by two, there was a remainder!"
+               --      q
 #            else
              in diff1
 #            endif

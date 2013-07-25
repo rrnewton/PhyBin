@@ -21,7 +21,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          avg_branchlen, get_bootstraps,
 
          -- * Command line config options
-         PhyBinConfig(..), default_phybin_config,
+         PhyBinConfig(..), default_phybin_config, 
 
          -- * General helpers
          Label, LabelTable,
@@ -212,6 +212,7 @@ data PhyBinConfig =
       , do_graph :: Bool
       , do_draw :: Bool
       , clust_mode  :: ClustMode
+      , use_hashrf  :: Bool  
       , print_rfmatrix :: Bool
       , dist_thresh :: Maybe Int
       , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
@@ -228,12 +229,17 @@ default_phybin_config =
       , do_graph = False
       , do_draw = False
       , clust_mode = BinThem
+#ifdef USE_HASHRF
+      , use_hashrf = True
+#else
+      , use_hashrf = False
+#endif
       , print_rfmatrix = False
       , dist_thresh = Nothing
       , branch_collapse_thresh = Nothing
      }
 
-data ClustMode = BinThem | ClusterThem C.Linkage 
+data ClustMode = BinThem | ClusterThem { linkage :: C.Linkage }
 
 ----------------------------------------------------------------------------------------------------
 -- * Simple utility functions for the core types:

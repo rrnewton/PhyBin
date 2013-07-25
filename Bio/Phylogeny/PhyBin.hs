@@ -59,7 +59,7 @@ debug = True
 driver :: PhyBinConfig -> IO ()
 driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
             do_graph, branch_collapse_thresh,
-            dist_thresh, clust_mode, print_rfmatrix } =
+            dist_thresh, clust_mode, use_hashrf, print_rfmatrix } =
    -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
@@ -154,8 +154,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                                           map (\ (tr,OneCluster ls) -> (length ls, OneCluster ls)) $
                                           M.toList x
                             return (x,binlist,[])
-      ClusterThem lnk -> do
-        (mat, dendro) <- doCluster num_taxa lnk validtrees        
+      ClusterThem{linkage} -> do
+        (mat, dendro) <- doCluster use_hashrf num_taxa linkage validtrees        
         when print_rfmatrix $ printDistMat stdout mat
         writeFile (combine output_dir ("dendrogram.txt"))
                   (show$ fmap treename dendro)
@@ -222,8 +222,8 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 		           warnings2))
 
     async2 <- case clust_mode of
-                BinThem         -> outputBins binlist output_dir do_graph
-                ClusterThem lnk -> outputClusters num_taxa binlist output_dir do_graph
+                BinThem       -> outputBins binlist output_dir do_graph
+                ClusterThem{} -> outputClusters num_taxa binlist output_dir do_graph
 
     -- Wait on parallel tasks:
     putStrLn$ "Waiting for asynchronous tasks to finish..."
@@ -248,18 +248,14 @@ doBins validtrees = do
 	          binthem validtrees
     return (classes)
 
-doCluster :: Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
-doCluster num_taxa linkage validtrees = do
+doCluster :: Bool -> Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
+doCluster use_hashrf num_taxa linkage validtrees = do
   putStrLn$ "Clustering using method "++show linkage
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees
-#ifdef USE_HASHRF
-#warning "Using HashRF algorithm"
-      mat            = hashRF num_taxa nwtrees
-#else
-      (mat,eachbips) = distanceMatrix nwtrees
-#endif
-
+      mat = if use_hashrf 
+            then hashRF num_taxa nwtrees
+            else fst (distanceMatrix nwtrees)
       ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
 --                         | i == numtrees-1 = 0 
@@ -283,7 +279,7 @@ reportClusts mode binlist = do
                  case mode of
                    BinThem -> vcat [text ("avg bootstraps "++show (get_bootstraps$ avg_trees$ map nwtree ftrees)++", "),
                                     text "all: " <> pPrint (filter (not . null) $ map (get_bootstraps . nwtree) ftrees)]
-                   ClusterThem _ -> hcat [] ]
+                   ClusterThem{} -> hcat [] ]
 
 -- | Convert a flat list of clusters into a map from individual trees to clusters.
 clustsToMap :: [OneCluster StandardDecor] -> BinResults StandardDecor

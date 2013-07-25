@@ -52,6 +52,7 @@ data Flag
     | View
     | TabDelimited Int Int
 
+    | HashRF Bool
     | SelfTest
     | RFMatrix | LineSetDiffMode | PrintNorms | PrintReg
     | Cluster C.Linkage
@@ -92,8 +93,12 @@ options =
      , Option []    ["UPGMA"]    (NoArg$ Cluster C.UPGMA)          $  "Use Unweighted Pair Group Method (average linkage)"
 
      , Option []    ["editdist"]  (ReqArg (EditDistThresh . read) "DIST")$
-                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters."
+                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters."                                  
      , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
+
+     , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
+     , Option []    ["simple"] (NoArg$ HashRF False) "(default) use direct all-to-all comparison"
+     , Option []    ["hashrf"] (NoArg$ HashRF True)    "use a variant of the HashRF algorithm for the distance matrix"
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
@@ -215,9 +220,10 @@ main =
              exitSuccess
 
            PrintNorms -> return cfg
-           PrintReg   -> return cfg           
-     
+           PrintReg   -> return cfg
+           
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
+           HashRF  bl  -> return cfg { use_hashrf = bl }
            BinningMode -> return cfg { clust_mode = BinThem }
            EditDistThresh n -> return cfg { dist_thresh = Just n }
            DendogramOnly    -> return cfg { dist_thresh = Nothing }
