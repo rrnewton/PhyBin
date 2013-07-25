@@ -108,10 +108,24 @@ markLabel lab (DLS _ vec)= DLS (UB.modify (\vec -> return (MU.write vec lab (B.f
 #  endif
 
 #else
-type DenseLabelSet = SI.IntSet
-markLabel lab set   = SI.insert lab set 
-mkEmptyDense _size  = SI.empty
-mkSingleDense _size = SI.singleton
+-- type DenseLabelSet = SI.IntSet
+
+-- | Here we must deal with the complexity of picking a normal form that represents
+-- bipartitions uniquely, irrespective of whether "AB|CDE" is constructed by adding
+-- "AB" or by adding "CDE".
+data DenseLabelSet = DenseLabelSet 
+                     { marks   :: !SI.IntSet 
+                     , bound   :: {-# UNPACK #-} !Int 
+                     , flipped :: {-# UNPACK #-} !Bool }
+-- By convention we take a designated bit to be always zero.  Attempts to flip it
+-- instead invert the representation.
+markLabel 0   set   = if flipped set
+                      then set
+                      else (invertDense set){ flipped=True }
+markLabel lab set = set{ marks= SI.insert lab (marks set) }
+mkEmptyDense size = DenseLabelSet SI.empty size False
+mkSingleDense size 0 = DenseLabelSet SI.empty size True
+mkSingleDense size x = DenseLabelSet (SI.singleton x) size False
 denseUnions _size   = SI.unions 
 bipSize             = SI.size
 denseDiff           = SI.difference
