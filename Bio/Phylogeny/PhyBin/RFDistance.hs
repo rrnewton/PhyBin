@@ -368,7 +368,7 @@ consensusTree :: Int -> [NewickTree a] -> NewickTree ()
 consensusTree _ [] = error "Cannot take the consensusTree of the empty list"
 consensusTree num_taxa (hd:tl) = bipsToTree num_taxa intersection
   where
-    intersection = L.foldl1' S.intersection (map allBips (hd:tl))
+    intersection = L.foldl' S.intersection (allBips hd) (map allBips tl)
 --     intersection = loop (allBips hd) tl
 --     loop :: S.Set DenseLabelSet -> [NewickTree a] -> S.Set DenseLabelSet
 --     loop !remain []      = remain

@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 
 module Main where
-import           Data.List (sort, intersperse,foldl1')
+import           Data.List (sort, intersperse, foldl')
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -411,8 +411,8 @@ consensusTest alltrees consensus = do
   let num_taxa      = numLeaves (nwtree ctree)
       plainTrs      = map nwtree  ftrees 
       eachbips      = map allBips plainTrs
-      totalBips     = foldl1' S.union        eachbips
-      intersectBips = foldl1' S.intersection eachbips
+      totalBips     = foldl' S.union        S.empty eachbips
+      intersectBips = foldl' S.intersection S.empty eachbips
       FullTree _ labs _ = ctree
       linesPrnt x = unlines (map (("  "++) . dispBip labs) $ S.toList x)
   putStrLn$ "Bips in each: "++     show (map S.size eachbips)

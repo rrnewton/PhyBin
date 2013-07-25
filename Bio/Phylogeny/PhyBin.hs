@@ -14,7 +14,7 @@ module Bio.Phylogeny.PhyBin
 
 import qualified Data.Foldable as F
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy, foldl1', intersperse) 
+import           Data.List           (delete, minimumBy, sortBy, foldl1', foldl', intersperse)
 import           Data.Maybe          (fromMaybe)
 import           Data.Either         (partitionEithers)
 import           Data.Time.Clock
@@ -141,10 +141,11 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
       putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings2)
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length validtrees)
     putStrLn$ "Total tree nodes contained in valid trees: "++ show (sum counts)
-    let all_branches = concatMap (F.foldr' (\x ls -> getBranchLen x:ls) []) validtrees
-    putStrLn$ "Average branch len over valid trees: "++ show (avg all_branches)
-    putStrLn$ "Max/Min branch lengths: "++ show (foldl1' max all_branches,
-                                                 foldl1' min all_branches)
+    let all_branches = concatMap (F.foldr' (\x ls -> getBranchLen x:ls) []) validtrees    
+    unless (null all_branches) $ do
+      putStrLn$ "Average branch len over valid trees: "++ show (avg all_branches)
+      putStrLn$ "Max/Min branch lengths: "++ show (foldl1' max all_branches,
+                                                   foldl1' min all_branches)
 
     --------------------------------------------------------------------------------
     -- Next, dispatch on the mode and do the actual clustering or binning.
@@ -160,35 +161,39 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
       ClusterThem{linkage} -> do
         (mat, dendro) <- doCluster use_hashrf num_taxa linkage validtrees        
         when print_rfmatrix $ printDistMat stdout mat
-        writeFile (combine output_dir ("dendrogram.txt"))
-                  (show$ fmap treename dendro)
-        putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
-
-        gvizAsync <- if do_graph
-                     then async (do 
-                       t0 <- getCurrentTime
-                       let dot = dotDendrogram "dendrogram" 1.0 dendro
-                       _ <- dotToPDF dot (combine output_dir "dendrogram.pdf")
-                       t1 <- getCurrentTime          
-                       putStrLn$ " [finished] Wrote dendrogram diagram to file dendrogram.pdf ("
-                                 ++show(diffUTCTime t1 t0)++")")
-                     else async (return ())
-
         hnd <- openFile  (combine output_dir ("distance_matrix.txt")) WriteMode
         printDistMat hnd mat
         hClose hnd
-
+        --------------------
+        writeFile (combine output_dir ("dendrogram.txt"))
+                  (show$ fmap treename dendro)
+        putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
+        let plotIt mnameMap = 
+              if do_graph
+              then async (do 
+                t0 <- getCurrentTime
+                let dot = dotDendrogram "dendrogram" 1.0 dendro mnameMap
+                _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
+                t1 <- getCurrentTime          
+                putStrLn$ " [finished] Wrote dendrogram diagram to file dendrogram.pdf ("
+                          ++show(diffUTCTime t1 t0)++")")
+              else async (return ())
         case dist_thresh of
-          Nothing -> return (M.empty,[],[]) -- error "Fully hierarchical cluster output is not finished!  Use --editdist."
-          Just dstThresh -> do
+          Nothing -> do a <- plotIt Nothing
+                        return (M.empty,[],[a])
+                     -- error "Fully hierarchical cluster output is not finished!  Use --editdist."
+          Just dstThresh -> do            
             putStrLn$ "Combining all clusters at distance less than or equal to "++show dstThresh
             let clusts = sliceDendro (fromIntegral dstThresh) dendro
+                classes = clustsToMap clusts
                 -- Cache the lengths:
                 wlens  = [ (length ls, OneCluster ls) | OneCluster ls <- clusts ]
-                sorted0 = reverse$ sortBy (compare `on` fst) wlens
+                sorted0 = reverse$ sortBy (compare `on` fst) wlens -- TODO: Parallel sorting?
+                nameMap = clustsToNameMap (map snd sorted0)
+            gvizAsync <- plotIt (Just nameMap)
             putStrLn$ "After flattening, cluster sizes are: "++show (map fst sorted0)
             -- Flatten out the dendogram:
-            return (clustsToMap clusts, sorted0, [gvizAsync])
+            return (classes, sorted0, [gvizAsync])
 
     unless (null binlist)$ reportClusts clust_mode binlist
         
@@ -294,6 +299,14 @@ clustsToMap clusts = F.foldl' fn M.empty clusts
       F.foldl' (fn2 theclust) acc ftrs
     fn2 theclust acc (FullTree{nwtree}) =
       M.insert (anonymize_annotated nwtree) theclust acc
+
+-- | Map each tree NAME onto the one-based index (in sorted order) of the cluster it
+-- comes from.
+clustsToNameMap :: [OneCluster StandardDecor] -> M.Map TreeName Int
+clustsToNameMap clusts = foldl' fn M.empty (zip [1..] clusts)
+  where
+    fn acc (ix,(OneCluster ftrs)) =
+      foldl' (\acc' t -> M.insert (treename t) ix acc') acc ftrs
 
 flattenDendro :: (C.Dendrogram (FullTree DefDecor)) -> OneCluster StandardDecor
 flattenDendro dendro =

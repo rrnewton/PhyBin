@@ -12,8 +12,9 @@ import           Text.Printf        (printf)
 import           Data.List          (elemIndex, isPrefixOf)
 import           Data.List.Split    (chunksOf)
 import           Data.Maybe         (fromJust)
-import           Data.Map           ((!))
+import qualified Data.Map           as M
 import qualified Data.Set           as S
+import qualified Data.Vector        as V
 import           Data.Text.Lazy     (pack)
 import           Control.Monad      (void)
 import           Control.Concurrent  (Chan, newChan, writeChan, forkIO)
@@ -21,6 +22,7 @@ import qualified Data.Graph.Inductive as G  hiding (run)
 import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
 import qualified Data.GraphViz.Attributes.Colors   as GC
+import           Data.GraphViz.Attributes.Colors   (Color(RGB))
 -- import           Test.HUnit          ((~:),(~=?),Test,test)
 
 import qualified Data.Clustering.Hierarchical as C
@@ -35,7 +37,7 @@ import           Bio.Phylogeny.PhyBin.CoreTypes
 toGraph :: FullTree StandardDecor -> G.Gr String Double
 toGraph (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
   where
- fromLabel ix = tbl ! ix
+ fromLabel ix = tbl M.! ix
  loop (NTLeaf _ name) = 
     do let str = fromLabel name
        _ <- G.insMapNodeM str
@@ -61,16 +63,59 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
        mapM_ (\x -> G.insMapEdgeM (node, x, branchLen$ get_dec x)) ls
        return ()
 
--- dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr (Either String String) Double
+----------------------------------------------------------------------------------------------------
+-- Dendrograms
+ ----------------------------------------------------------------------------------------------------
+
+-- | Some duplicated code with dotNewickTree.
+dotDendrogram :: String -> Double -> C.Dendrogram (FullTree a) -> Maybe (M.Map TreeName Int) -> Gv.DotGraph G.Node
+dotDendrogram title edge_scale origDendro mNameMap =
+  Gv.graphToDot myparams graph
+ where
+  (charsDropped, dendro) = truncateNames origDendro
+  -- This is ugly, but we modify the name map to match:
+  nameMap' = fmap (M.mapKeys (drop charsDropped)) mNameMap
+    
+--  graph :: G.Gr (Either String String) Double
+  graph :: G.Gr String Double   
+  graph = dendrogramToGraph dendro
+  myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
+  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
+                                Gv.fmtNode= nodeAttrs,
+                                Gv.fmtEdge= edgeAttrs
+                              }
+--  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
+  nodeAttrs :: (Int, TreeName) -> [GA.Attribute]
+  nodeAttrs (_num, trName) =
+    let (tag,shp) = -- case eith of
+          -- Left treename -> (take 60 treename, GA.Ellipse)
+          -- Right _       -> ("", GA.PointShape)
+          if isPrefixOf "DUMMY_" trName
+          then ("", GA.PointShape)          
+          else (trName, GA.Ellipse)
+    in 
+    [ GA.Label$ GA.StrLabel$ pack tag
+    , GA.Shape shp
+    , GA.Style [GA.SItem GA.Filled []]
+    ] ++
+    case nameMap' of
+      Nothing -> []
+      Just nm -> case M.lookup trName nm of
+                   Nothing -> []
+                   Just ind -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
+  edgeAttrs = getEdgeAttrs edge_scale
+
+
+-- | Create a graph using TreeNames for node labels and edit-distance for edge labels.
 dendrogramToGraph :: C.Dendrogram (FullTree a) -> G.Gr String Double
 dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
   where
-
- loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM (drop prefChars treename)
+ loop node@(C.Leaf FullTree{treename}) = G.insMapNodeM treename
  loop node@(C.Branch 0 left right) = do
    -- As a preprocessing step we collapse clusters that are separated by zero edit distance.
+   ----------------------------------------
    let lvs = collapseZeroes left ++ collapseZeroes right
-       nms = map ((drop prefChars) . treename) lvs
+       nms = map (treename) lvs
        lens = map length nms
        total = sum lens
        avg   = total `quot` length nms
@@ -80,11 +125,12 @@ dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
        chunked = chunksOf perline nms
        name = unlines (map unwords chunked)
    G.insMapNodeM name
+   ----------------------------------------   
  loop node@(C.Branch dist left right) =
     do (_,l) <- loop left
        (_,r) <- loop right
        -- Interior nodes do NOT have their names drawn:
-       let ndname = "DUMMY_"++(l++"_"++r)
+       let ndname = "DUMMY_"++(l++"_"++r)  -- HACK!
                     -- Right (deEither l ++"_"++ deEither r)
        (midN,mid) <- G.insMapNodeM ndname
        G.insMapEdgeM (l, mid, dist)
@@ -95,12 +141,20 @@ dendrogramToGraph orig = G.run_ G.empty $ void$ loop orig
  collapseZeroes (C.Branch 0 l r) = collapseZeroes l ++ collapseZeroes r
  collapseZeroes oth = error "dendrogramToGraph: internal error.  Not expecting non-zero branch length here."
 
- prefChars = length$ commonPrefix$ S.toList$ allNames orig
 
- allNames (C.Leaf tr)      = S.singleton (treename tr)
- allNames (C.Branch _ l r) = S.union (allNames l) (allNames r)
+-- | The plot looks nicer when the names aren't bloated with repeated stuff. This
+-- replaces all tree names with potentially shorter names by removing the common prefix.
+-- Returns how many characters were dropped.
+truncateNames :: C.Dendrogram (FullTree a) -> (Int, C.Dendrogram (FullTree a))
+truncateNames dendro = (prefChars, fmap chopName dendro)
+ where 
+  chopName ft = ft{ treename= drop prefChars (treename ft) }
+  prefChars = length$ commonPrefix$ S.toList$ allNames dendro
+  allNames (C.Leaf tr)      = S.singleton (treename tr)
+  allNames (C.Branch _ l r) = S.union (allNames l) (allNames r)
 
- 
+----------------------------------------------------------------------------------------------------
+
 
 -- | Open a GUI window to displaya tree.
 --
@@ -146,7 +200,7 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
     Gv.graphToDot myparams graph
  where 
   graph = toGraph2 atree
-  fromLabel ix = tbl ! ix  
+  fromLabel ix = tbl M.! ix  
   myparams :: Gv.GraphvizParams G.Node (NewickTree StandardDecor) Double () (NewickTree StandardDecor)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
                                 Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
@@ -162,6 +216,26 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
   edgeAttrs = getEdgeAttrs edge_scale
 
 
+-- | Some arbitrarily chosen colors from the X11 set:
+defaultPalette :: V.Vector GA.Color
+defaultPalette = V.fromList$ concat$ replicate 4 $ map GA.X11Color 
+  [ Gv.PaleVioletRed
+  , Gv.MediumPurple
+  , Gv.PaleGreen
+  ]
+
+-- Grabbed the first couple palettes off a website:
+altPalette :: V.Vector GA.Color
+altPalette = V.fromList $ concat $ replicate 3 $ 
+  -- http://www.colourlovers.com/palette/2962435/Autumn_Roses
+  [ RGB 159 74 81, RGB 217 183 173, RGB 149 91 116, RGB 185 138 148
+  --  , RGB 101 69 82 -- too dark
+  ] ++
+  -- http://www.colourlovers.com/palette/2962434/Earthy_warm
+  [ RGB 108 74 39, RGB 207 179 83, RGB 180 149 60, RGB 244 242 185
+  -- , RGB 61 63 39
+  ]
+  
 getEdgeAttrs :: Double -> (t, t1, Double) -> [GA.Attribute]
 getEdgeAttrs edge_scale = edgeAttrs
  where 
@@ -177,8 +251,6 @@ getEdgeAttrs edge_scale = edgeAttrs
 			    then [GA.Color [weighted$ GA.X11Color Gv.Red],
                                   GA.LWidth 3.0, GA.Len minlen]
 			    else [GA.Len draw_weight]
-
-  weighted c = GC.WC {GC.wColor=c, GC.weighting=Nothing}
   minlen = 0.7
   maxlen = 3.0
   compute_draw_weight w scale = 
@@ -186,42 +258,14 @@ getEdgeAttrs edge_scale = edgeAttrs
     -- Don't draw them too big or it gets annoying:
     (min scaled maxlen)
 
--- | Some duplicated code with dotNewickTree.
-dotDendrogram :: String -> Double -> C.Dendrogram (FullTree a) -> Gv.DotGraph G.Node
-dotDendrogram title edge_scale dendro =
-  Gv.graphToDot myparams graph
- where
---  graph :: G.Gr (Either String String) Double
-  graph :: G.Gr String Double   
-  graph = dendrogramToGraph dendro
-  myparams :: Gv.GraphvizParams G.Node String Double () String -- (Either String String)
-  myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
-                                Gv.fmtNode= nodeAttrs,
-                                Gv.fmtEdge= edgeAttrs
-                              }
---  nodeAttrs :: (Int, C.Dendrogram(FullTree StandardDecor)) -> [GA.Attribute]
-  nodeAttrs :: (Int, String) -> [GA.Attribute]
-  nodeAttrs (_num, str) =
-    let (tag,shp) = -- case eith of
-          -- Left treename -> (take 60 treename, GA.Ellipse)
-          -- Right _       -> ("", GA.PointShape)
-          if isPrefixOf "DUMMY_" str
-          then ("", GA.PointShape)          
-          else (str, GA.Ellipse)
-    in 
-    [ GA.Label$ GA.StrLabel$ pack tag
-    , GA.Shape shp
-    , GA.Style [GA.SItem GA.Filled []]
-    ]
-  edgeAttrs = getEdgeAttrs edge_scale
-
+weighted c = GC.WC {GC.wColor=c, GC.weighting=Nothing}
 
 -- | This version shows the ordered/rooted structure of the normalized tree.
 dotNewickTree_debug :: String -> FullTree StandardDecor -> Gv.DotGraph G.Node
 dotNewickTree_debug title atree@(FullTree _ tbl tree) = Gv.graphToDot myparams graph
  where 
   graph = toGraph2 atree
-  fromLabel ix = tbl ! ix    
+  fromLabel ix = tbl M.! ix    
   myparams :: Gv.GraphvizParams G.Node (NewickTree StandardDecor) Double () (NewickTree StandardDecor)
   myparams = Gv.defaultParams { Gv.globalAttributes= [Gv.GraphAttrs [GA.Label$ GA.StrLabel$ pack title]],
 			        Gv.fmtNode= nodeAttrs, Gv.fmtEdge= edgeAttrs }
