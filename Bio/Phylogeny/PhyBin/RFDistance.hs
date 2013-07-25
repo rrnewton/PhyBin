@@ -160,16 +160,7 @@ distanceMatrix lst =
              U.generate i  $ \ j ->
              let diff1 = S.size (S.difference (eachbips V.! i) (eachbips V.! j))
                  diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
-                 (q,rem) = (diff1 + diff2) `quotRem` 2
-#            ifdef NORMALIZATION          
-             in q + rem
-               -- if rem==0
-               -- then q
-               -- else -- trace "Warning, when dividing symmetric difference by two, there was a remainder!"
-               --      q
-#            else
-             in diff1
-#            endif
+             in diff1 + diff2
    in (mat, eachbips)
 
 -- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
@@ -308,8 +299,7 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
                  traverseDense_ fn1 haveIt
         F.traverse_ fn bipTable
         v1 <- V.unsafeFreeze matr
-        T.traverse (fmap (U.map (`quot` 2)) . U.unsafeFreeze) v1
-
+        T.traverse (U.unsafeFreeze) v1
 
 
 #if 0
@@ -410,10 +400,4 @@ bipsToTree num_taxa bip =
       -- Here all subtrees that match the current bip get merged:
       loop ((denseUnions num_taxa (map fst in_),
              NTInterior ()        (map snd in_)) : out) tl
-
-    -- sizeChop [] = []
-    -- sizeChop (hd:tl) =
-    --   let sz        = bipSize hd 
-    --       (ths,rst) = span ((sz ==) . bipSize) tl
-    --   in (hd:ths) : sizeChop rst
 

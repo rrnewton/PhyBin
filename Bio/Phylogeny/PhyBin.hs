@@ -271,8 +271,8 @@ reportClusts mode binlist = do
 
     putStrLn$ " Outcome: "++show (length binlist)++" clusters found, "++show (length$ takeWhile (>1) binsizes)
              ++" non-singleton, top bin sizes: "++show(take 10 binsizes)
-    putStrLn$"  First 50 bin sizes, excluding singletons:"
-    forM_ (zip [1..50] binlist) $ \ (ind, (len, OneCluster ftrees)) -> do
+    putStrLn$"  Up to first 30 bin sizes, excluding singletons:"
+    forM_ (zip [1..30] binlist) $ \ (ind, (len, OneCluster ftrees)) -> do
        when (len > 1) $ -- Omit that long tail of single element classes...
           putStrLn$show$
            hcat [text ("  * cluster#"++show ind++", members "++ show len ++", "), 
