@@ -97,12 +97,16 @@ dotDendrogram title edge_scale origDendro mNameMap =
     [ GA.Label$ GA.StrLabel$ pack tag
     , GA.Shape shp
     , GA.Style [GA.SItem GA.Filled []]
-    ] ++
+    ]
+    ++
     case nameMap' of
       Nothing -> []
       Just nm -> case M.lookup trName nm of
                    Nothing -> []
-                   Just ind -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
+                   -- Here we color the top TEN clusters:
+                   -- TODO: How do we get the CLUSTERS!
+                   Just ind | ind <= 10 -> [ GA.Color [weighted$ defaultPalette V.! (ind-1) ] ]
+                            | otherwise -> []
   edgeAttrs = getEdgeAttrs edge_scale
 
 
@@ -219,9 +223,16 @@ dotNewickTree title edge_scale atree@(FullTree _ tbl tree) =
 -- | Some arbitrarily chosen colors from the X11 set:
 defaultPalette :: V.Vector GA.Color
 defaultPalette = V.fromList$ concat$ replicate 4 $ map GA.X11Color 
-  [ Gv.PaleVioletRed
+  [ Gv.Aquamarine
+  , Gv.PaleVioletRed
   , Gv.MediumPurple
   , Gv.PaleGreen
+  , Gv.PapayaWhip
+  , Gv.SkyBlue
+  , Gv.Yellow
+  , Gv.Crimson
+  , Gv.Gray
+  , Gv.PaleGoldenrod
   ]
 
 -- Grabbed the first couple palettes off a website:

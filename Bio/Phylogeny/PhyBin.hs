@@ -24,7 +24,7 @@ import qualified Data.Set                   as S
 import qualified Data.Vector                 as V
 import qualified Data.Vector.Unboxed         as U
 import           Control.Monad       (forM, forM_, filterM, when, unless)
-import           Control.Concurrent.Async
+import qualified Control.Concurrent.Async as Async
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
@@ -52,6 +52,17 @@ import Debug.Trace
 -- Turn on for extra invariant checking:
 debug :: Bool
 debug = True
+
+#ifdef SEQUENTIALIZE
+#warning "SEQUENTIALIING execution.  Disabling all parallelism."
+type Async t = t
+async a = a
+wait  x = return x 
+#else
+type Async t = Async.Async t
+async = Async.async
+wait  = Async.wait
+#endif
 
 ----------------------------------------------------------------------------------------------------
 
@@ -169,7 +180,7 @@ driver PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                   (show$ fmap treename dendro)
         putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
         let plotIt mnameMap = 
-              if do_graph
+              if True -- do_graph
               then async (do 
                 t0 <- getCurrentTime
                 let dot = dotDendrogram "dendrogram" 1.0 dendro mnameMap

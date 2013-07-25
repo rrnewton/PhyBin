@@ -97,8 +97,10 @@ options =
      , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
 
      , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
-     , Option []    ["simple"] (NoArg$ HashRF False) "(default) use direct all-to-all comparison"
-     , Option []    ["hashrf"] (NoArg$ HashRF True)    "use a variant of the HashRF algorithm for the distance matrix"
+     , Option []    ["simple"] (NoArg$ HashRF False)
+       ((if hashRF then "" else "(default) ")++ "use direct all-to-all comparison")
+     , Option []    ["hashrf"] (NoArg$ HashRF True)
+       ((if hashRF then "(default) " else "")++"use a variant of the HashRF algorithm for the distance matrix")
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
@@ -150,6 +152,8 @@ options =
      , Option [] ["print"]      (NoArg PrintReg)     "simply print out a concise form of each input tree"       
      , Option [] ["printnorms"] (NoArg PrintNorms)   "simply print out a concise and NORMALIZED form of each input tree"
      ]
+ where
+   hashRF = use_hashrf default_phybin_config
 
 usage :: String
 usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++

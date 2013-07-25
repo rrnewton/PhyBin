@@ -50,6 +50,10 @@ Flag bitvec
   description: Use bitvectors rather than IntSets for bipartitions.
   default: False
 
+Flag sequential
+  description: Don't use any parallelism at all.
+  default: False
+
 Library
   Exposed-modules:   Bio.Phylogeny.PhyBin
                      Bio.Phylogeny.PhyBin.RFDistance
@@ -77,6 +81,8 @@ Library
      CPP-Options: -DUSE_HASHRF
   if flag(bitvec)
      CPP-Options: -DBITVEC_BIPS
+  if flag(sequential)
+     CPP-Options: -DSEQUENTIALIZE
 
 Executable phybin
   Main-is:           Main.hs
@@ -100,3 +106,5 @@ Executable phybin
      CPP-Options: -DUSE_HASHRF
   if flag(bitvec)
      CPP-Options: -DBITVEC_BIPS
+  if flag(sequential)
+     CPP-Options: -DSEQUENTIALIZE
