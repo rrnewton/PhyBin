@@ -331,7 +331,8 @@ maybeInsert fn (Just x) ls = insertBy fn x ls
 annotateWLabLists :: NewickTree DefDecor -> AnnotatedTree
 annotateWLabLists tr = case tr of 
   NTLeaf (bs,bl) n      -> NTLeaf (StandardDecor bl bs 1 [n]) n
-  NTInterior (bs,bl) [] -> error "annotateWLabLists: internal invariant broken.  Shouldn't have NTInterior with null children."
+  NTInterior (bs,bl) [] -> NTInterior (StandardDecor bl bs 0 []) []
+  -- NTInterior (bs,bl) [] -> error "annotateWLabLists: internal invariant broken.  Shouldn't have NTInterior with null children."
   NTInterior (bs,bl) ls -> 
       let children = map annotateWLabLists ls in 
       NTInterior (StandardDecor bl bs
