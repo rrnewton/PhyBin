@@ -404,6 +404,10 @@ bipsToTree num_taxa bip =
     lvl0 = [ (mkSingleDense num_taxa ix, NTLeaf () ix)
            | ix <- [0..num_taxa-1] ]
 
+    -- VERY expensive!  However, due to normalization issues this is necessary for now:
+    -- TODO: in the future make it possible to definitively denormalize.
+    isMatch bip x = denseIsSubset x bip || denseIsSubset x (invertDense num_taxa bip)
+
     -- We recursively glom together subtrees until we have a complete tree.
     -- We only process larger subtrees after we have processed all the smaller ones.
     loop !subtrees [] =
@@ -412,8 +416,14 @@ bipsToTree num_taxa bip =
         [(_,one)] -> one
         lst   -> NTInterior () (map snd lst)
     loop !subtrees (bip:tl) =
-      let (in_,out) = L.partition ((denseIsSubset bip) . fst) subtrees in
-      -- Here all subtrees that match the current bip get merged:
-      loop ((denseUnions num_taxa (map fst in_),
-             NTInterior ()        (map snd in_)) : out) tl
+      let (in_,out) = L.partition (isMatch bip. fst) subtrees in
+      case in_ of
+        [] -> error $"Hmm... no match for bip: "++show bip
+              ++" out is\n "++show out++"\n and remaining bips "++show (length tl)
+              ++"\n when processing orig bip set:\n  "++show bip
+          -- loop out tl
+        _ -> 
+         -- Here all subtrees that match the current bip get merged:
+         loop ((denseUnions num_taxa (map fst in_),
+                NTInterior ()        (map snd in_)) : out) tl
 
