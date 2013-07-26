@@ -48,7 +48,8 @@ import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           System.IO.Unsafe
 
--- import qualified Control.Monad.Par.IO as PIO
+import qualified Control.Monad.Par.IO as PIO
+import qualified Control.Monad.Par.Combinator as PC
 
 import           Control.LVish hiding (for_)
 import qualified Data.LVar.Set   as IS
@@ -264,14 +265,13 @@ hashRF num_taxa trees = do
     t0 <- getCurrentTime
     IMapSnap bigtable <- getBigtable
     t1 <- getCurrentTime
-    res <- runParIO $ ingest bigtable
+    res <- PIO.runParIO $ ingest bigtable
     t2 <- getCurrentTime
     putStrLn$ "hashRF: time spent in first/second runPar and total: "
               ++show (diffUTCTime t1 t0, diffUTCTime t2 t1, diffUTCTime t2 t0)
     return res
   where
     getBigtable :: IO (Snapshot (IMap DenseLabelSet) (Snapshot IS.ISet Int))
---    getBigtable :: IO (Snapshot (IMap DenseLabelSet) (S.Set Int))
     getBigtable = runParThenFreezeIO par
 
     par :: forall d s . Par d s (IMap DenseLabelSet s (IS.ISet s Int))
@@ -291,12 +291,9 @@ hashRF num_taxa trees = do
       F.traverse_ fn bips
 
     -- Second, ingest the table to construct the distance matrix:
---    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> IO DistanceMatrix
-    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> Par d s DistanceMatrix2
+    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> PIO.ParIO DistanceMatrix2
     ingest bipTable = theST
       where
---       theST :: forall s0 . ST s0 DistanceMatrix
---       theST :: IO DistanceMatrix
        theST = do 
         -- Triangular matrix, starting narrow and widening:
         matr <- liftIO$ MV.new num_trees
@@ -309,9 +306,7 @@ hashRF num_taxa trees = do
 
         let bumpMatr i j | j < i     = incr i j
                          | otherwise = incr j i
---            incr :: Int -> Int -> ST s0 ()
             incr i j = do -- Not concurrency safe yet:
---                          unsafeIOToST$ putStrLn$" Reading at position "++show(i,j)
                           row <- MV.read matr i
 #if 0                            
                           elm <- MU.read row j
@@ -334,7 +329,8 @@ hashRF num_taxa trees = do
               in
 --                 trace ("Computed donthave "++ show dontHave) $ 
                  traverseDense_2 fn1 haveIt
-        parForTiled 16 (0,M.size bipTable) $ \ix -> do
+--        parForTiled 16 (0,M.size bipTable) $ \ix -> do
+        PC.parFor (PC.InclusiveRange 0 (M.size bipTable - 1)) $ \ix -> do
           -- liftIO$ F.traverse_ fn bipTable
           liftIO$ fn (snd$ M.elemAt ix bipTable)
         liftIO$ do
@@ -362,39 +358,6 @@ invertDense2 size bip = loop S.empty (size-1)
 traverseDense_2 fn bip =
   -- FIXME: need guaranteed non-allocating way to do this.
   S.foldr' (\ix acc ->  fn ix >> acc) (return ()) bip
---------------------------------------------------------------------------------
-
-
-#if 0
--- | Returns a (square) distance matrix encoded as a vector.
-distanceMatrix :: [AnnotatedTree] -> IO (U.Vector Word)
-distanceMatrix lst = do 
---   IM.IMapSnap (table :: M.Map DenseLabelSet (S.Set TreeID)) <- runParThenFreeze par
---   IM.IMapSnap (table :: M.Map DenseLabelSet (Snapshot IS.ISet TreeID)) <- runParThenFreeze par
-   IM.IMapSnap table <- runParThenFreeze par
-   let sz = P.length lst
-   v <- MU.replicate (sz*sz) (0::Word)
-   let fn set () =
-         
-   F.foldrM 
-   undefined
-  
-  -- runParThenFreeze -- get bip table
-  -- followed by ... fill matrix from bip table  
-  where
-    par = do   
-     table <- IM.newEmptyMap 
-     forM_ lst (insertBips table)
-     return table
-
-insertBips :: BipTable s -> AnnotatedTree -> Par d s ()
-insertBips table tree = do
-    let bips = allBips tree
-        fn bip () = do
-          IM.modify table bip (IS.putInSet tree)
-          return ()
-    F.foldrM fn () bips 
-#endif
 
 --------------------------------------------------------------------------------
 -- Miscellaneous Helpers
