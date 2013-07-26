@@ -22,8 +22,10 @@ module Bio.Phylogeny.PhyBin.RFDistance
 
 import           Control.Monad
 import           Control.Monad.ST
+import           Control.Monad.IO.Class
 import           Data.Function       (on)
 import           Data.Word
+import           Data.Time.Clock
 import qualified Data.Vector                 as V
 import qualified Data.Vector.Mutable         as MV
 import qualified Data.Vector.Unboxed.Mutable as MU
@@ -33,6 +35,8 @@ import qualified Data.Bit                    as B
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           System.IO.Unsafe
+
+-- import qualified Control.Monad.Par.IO as P
 
 import           Control.LVish hiding (for_)
 import qualified Data.LVar.Set   as IS
@@ -242,8 +246,11 @@ type TreeID = AnnotatedTree
 -- populates the table of bipartitions.  Then the table can be processed (locally) to
 -- produce (non-localized) increments to a distance matrix.
 hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix
-hashRF num_taxa trees = do 
+hashRF num_taxa trees = do
+    t0 <- getCurrentTime
     IMapSnap bigtable <- getBigtable
+    t1 <- getCurrentTime
+    putStrLn$ "hashRF: time spent in first runPar: "++show (diffUTCTime t1 t0)
     return $! ingest bigtable
   where
     getBigtable :: IO (Snapshot (IMap DenseLabelSet) (Snapshot IS.ISet Int))
