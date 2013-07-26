@@ -28,15 +28,27 @@ import           Data.Word
 import           Data.Time.Clock
 import qualified Data.Vector                 as V
 import qualified Data.Vector.Mutable         as MV
-import qualified Data.Vector.Unboxed.Mutable as MU
-import qualified Data.Vector.Unboxed         as U
+
+-- import qualified Data.Vector.Unboxed.Mutable as MU
+-- import qualified Data.Vector.Unboxed         as U
+
+-- TEMP: swapping these out:
+import qualified Data.Vector.Storable.Mutable as MU
+import qualified Data.Vector.Storable         as U
+
 import qualified Data.Vector.Unboxed.Bit     as UB
+import qualified Data.Vector.Storable.Mutable as MS
+import qualified Data.Vector.Storable         as SV
 import qualified Data.Bit                    as B
+import qualified Foreign.ForeignPtr as FP
+import           Foreign.Ptr        as Ptr
+import           Foreign.Storable (sizeOf)
+import qualified Data.Bits.Atomic   as BA
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           System.IO.Unsafe
 
--- import qualified Control.Monad.Par.IO as P
+-- import qualified Control.Monad.Par.IO as PIO
 
 import           Control.LVish hiding (for_)
 import qualified Data.LVar.Set   as IS
@@ -242,16 +254,21 @@ type TreeID = AnnotatedTree
 -- type DistanceMat s = NA.NatArray s Word32
 -- Except... bump isn't supported by our idempotent impl.
 
+type DistanceMatrix2 = V.Vector (SV.Vector Int)
+
 -- | This version slices the problem a different way.  A single pass over the trees
 -- populates the table of bipartitions.  Then the table can be processed (locally) to
 -- produce (non-localized) increments to a distance matrix.
-hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix
+hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix2
 hashRF num_taxa trees = do
     t0 <- getCurrentTime
     IMapSnap bigtable <- getBigtable
     t1 <- getCurrentTime
-    putStrLn$ "hashRF: time spent in first runPar: "++show (diffUTCTime t1 t0)
-    return $! ingest bigtable
+    res <- runParIO $ ingest bigtable
+    t2 <- getCurrentTime
+    putStrLn$ "hashRF: time spent in first/second runPar and total: "
+              ++show (diffUTCTime t1 t0, diffUTCTime t2 t1, diffUTCTime t2 t0)
+    return res
   where
     getBigtable :: IO (Snapshot (IMap DenseLabelSet) (Snapshot IS.ISet Int))
 --    getBigtable :: IO (Snapshot (IMap DenseLabelSet) (S.Set Int))
@@ -274,30 +291,34 @@ hashRF num_taxa trees = do
       F.traverse_ fn bips
 
     -- Second, ingest the table to construct the distance matrix:
-    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> DistanceMatrix
-    ingest bipTable = runST theST
+--    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> IO DistanceMatrix
+    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> Par d s DistanceMatrix2
+    ingest bipTable = theST
       where
-       theST :: forall s0 . ST s0 DistanceMatrix
+--       theST :: forall s0 . ST s0 DistanceMatrix
+--       theST :: IO DistanceMatrix
        theST = do 
         -- Triangular matrix, starting narrow and widening:
-        matr <- MV.new num_trees
+        matr <- liftIO$ MV.new num_trees
         -- Too bad MV.replicateM is insufficient.  It should pass index.  
         -- Instead we write this C-style:
-        for_ (0,num_trees) $ \ ix -> do 
-          row <- MU.replicate ix (0::Int)
+        liftIO$ for_ (0,num_trees) $ \ ix -> do 
+          row <- MS.replicate ix (0::Int)
           MV.write matr ix row
           return ()
 
-        unsafeIOToST$ putStrLn$" Built matrix for dim "++show num_trees
-
         let bumpMatr i j | j < i     = incr i j
                          | otherwise = incr j i
-            incr :: Int -> Int -> ST s0 ()
+--            incr :: Int -> Int -> ST s0 ()
             incr i j = do -- Not concurrency safe yet:
 --                          unsafeIOToST$ putStrLn$" Reading at position "++show(i,j)
                           row <- MV.read matr i
+#if 0                            
                           elm <- MU.read row j
                           MU.write row j (elm+1)
+#else
+                          incrStorable row j
+#endif                          
                           return ()
             fn (IS.ISetSnap bipMembs) =
               -- Here we quadratically consider all pairs of trees and ask whether
@@ -313,9 +334,12 @@ hashRF num_taxa trees = do
               in
 --                 trace ("Computed donthave "++ show dontHave) $ 
                  traverseDense_2 fn1 haveIt
-        F.traverse_ fn bipTable
-        v1 <- V.unsafeFreeze matr
-        T.traverse (U.unsafeFreeze) v1
+        parForTiled 16 (0,M.size bipTable) $ \ix -> do
+          -- liftIO$ F.traverse_ fn bipTable
+          liftIO$ fn (snd$ M.elemAt ix bipTable)
+        liftIO$ do
+          v1 <- V.unsafeFreeze matr
+          T.traverse (SV.unsafeFreeze) v1
 
 -- TEMPORARY:
 --------------------------------------------------------------------------------
@@ -469,5 +493,12 @@ bipsToTree num_taxa origbip =
          loop ((denseUnions num_taxa (map fst in_),
                 NTInterior ()        (map snd in_)) : out) tl
 
-
-
+{-# INLINE incrStorable #-}
+incrStorable :: MS.MVector RealWorld Int -> Int -> IO ()
+incrStorable (MS.MVector _ rowFP) offset =
+  FP.withForeignPtr rowFP $ \ (ptr :: Ptr Int) -> do 
+--    let ptr' = (P.ptrToIntPtr ptr) + offset
+    let ptr' = ptr `plusPtr` (offset * sizeOf (0::Int))
+    BA.fetchAndAdd ptr' (1::Int)
+    return ()
+  

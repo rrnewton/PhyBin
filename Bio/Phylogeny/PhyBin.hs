@@ -22,7 +22,11 @@ import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
 import qualified Data.Vector                 as V
-import qualified Data.Vector.Unboxed         as U
+
+-- import qualified Data.Vector.Unboxed         as U
+-- TEMP: swapping these out, because of no fetch-and-add on Unboxed yet:
+import qualified Data.Vector.Storable           as U
+
 import           Control.Monad       (forM, forM_, filterM, when, unless)
 import qualified Control.Concurrent.Async as Async
 import           Control.Exception   (evaluate)
