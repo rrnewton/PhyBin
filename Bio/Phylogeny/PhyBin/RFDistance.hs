@@ -52,9 +52,15 @@ import qualified Control.Monad.Par.IO as PIO
 import qualified Control.Monad.Par.Combinator as PC
 
 import           Control.LVish hiding (for_)
+#if 0
 import qualified Data.LVar.Set   as IS
-import qualified Data.LVar.SLSet as SL
 import           Data.LVar.Map   as IM
+#else
+#warning "Using skip-list based concurrent data structures for parallel PhyBin."
+import qualified Data.LVar.SLSet as IS
+import           Data.LVar.SLMap as IM
+#endif
+
 import           Data.LVar.NatArray as NA
 
 import           Bio.Phylogeny.PhyBin.CoreTypes

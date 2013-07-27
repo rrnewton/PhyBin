@@ -138,3 +138,64 @@ In fact... even if I use phybin to prune out the 503 trees with 10
 taxa, I still get the error.
 
 
+[2013.07.27] {Timing Phylip on wasp (3.33ghz nehalem)}
+
+100 Trees (157 taxa):
+---------------------
+
+ * Philip takes 13.6 seconds just for the 157-taxa 100-tree test case
+   from hashrf.
+ * DendroPy takes 5.3 seconds on the same machine.
+ * The same file takes 32 milleseconds in hashrf.
+ * It takes 1.79s in phybin using the NAIVE method.
+   It takes 0.167 seconds on one core using the parallel method -N1
+   (Fortunately, the parallel version takes exactly the same time as
+   the pre-parallelization version in this case. 0.167 sec.)
+   
+1000 Trees (157 taxa):
+----------------------
+
+This is the dataset that provides a real test for phybin.
+
+Here are times for the Data.LVar.Map version.  I'm including the
+breakdown of BipTable construction, vs. BipTable consumption (with the
+second, consuming phase being the one that actually populates the
+distance matrix).
+
+ * 1 thread: 2.9s (1.5 / 1.43)
+ * 2 thread: 1.63 (0.88 / 0.76)
+ * 3 thread: 1.32 (0.72 / 0.60)
+ * 4 thread: 1.06 (0.61 / 0.46)
+
+This is running with e.g. +RTS -N4 -K1G, and no other RTS options.
+Alas, the above is still with the space leak.  But it seems to happen
+between parsing and listing the total unique taxa.  It is probably not
+adversely affecting the time for the core rfdist computation.
+
+ * hashrf, 1 thread: 0.820 to compute matrix.
+
+Times on hive, 32-core westmere
+-------------------------------
+
+ * hashrf, 1 thread: 1.669s to compute matrix. 
+
+ * 1 thread: 
+ * 2 thread: 2.97s
+ * 4 thread: 1.85
+ * 6 thread: 1.75s
+ * 8 thread: 1.42s  (only uses about 450% CPU)
+ * 12 thread: 1.51s 
+  
+It's probably getting blocked on Blackholes.
+
+
+Testing SLMap/SLSet... prob not ready yet
+-----------------------------------------
+
+I haven't added constant-time snapshotting.  And the copying-to-freeze
+of the SLMap is truly ridiculoous.  It essentially requires doing the
+first phase fo the algorithm twice!  So, as expected the results are not good yet.
+
+ * 1 thread: 4.22s
+ * 4 thread: 1.65
+

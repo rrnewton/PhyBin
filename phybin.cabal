@@ -89,7 +89,7 @@ Library
   if flag(sequential)
      CPP-Options: -DSEQUENTIALIZE
 
-Executable phybin
+Executable phybin-par
   Main-is:           Main.hs
   Build-Depends:     phybin
   -- DUPLICATE:
