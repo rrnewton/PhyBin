@@ -86,20 +86,21 @@ options =
        
 {- -- TODO: FIXME: IMPLEMENT THIS:
      , Option []        []          (NoArg NullOpt)  ""
-     , Option ['t']     ["tabbed"]  (ReqArg parseTabDelim "NUM1:NUM2")$  "assume the input is a tab-delimited file with gene names \n"++
+     , Option ['t']     ["tabbed"]  (ReqArg parseTabDelim "NUM1:NUM2")$  "assume the input is a ab-delimited file with gene names \n"++
 		                                                        "in column NUM1 and Newick trees in NUM2"
 -}       
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Clustering Options ------------------------------"
 
-     , Option []    ["bin"]      (NoArg BinningMode)$  "Use simple binning, the cheapest form of 'clustering'"
+     , Option []    ["bin"]      (NoArg BinningMode)$                 "Use simple binning, the cheapest form of 'clustering'"
      , Option []    ["single"]   (NoArg$ Cluster C.SingleLinkage)  $  "Use single-linkage clustering (nearest neighbor)"
      , Option []    ["complete"] (NoArg$ Cluster C.CompleteLinkage)$  "Use complete-linkage clustering (furthest neighbor)"
-     , Option []    ["UPGMA"]    (NoArg$ Cluster C.UPGMA)          $  "Use Unweighted Pair Group Method (average linkage)"
+     , Option []    ["UPGMA"]    (NoArg$ Cluster C.UPGMA)          $  "Use Unweighted Pair Group Method (average linkage) - DEFAULT mode"
 
      , Option []    ["editdist"]  (ReqArg (EditDistThresh . read) "DIST")$
-                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters."  
-     , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
+                                  "Combine all clusters separated by DIST or less.  Report a flat list of clusters.\n"++
+                                  "Irrespective of whether this is activated, a hierarchical clustering (dendogram.pdf) is produced."  
+--     , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
 
      , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
      , Option []    ["simple"] (NoArg$ HashRF False)

@@ -234,7 +234,8 @@ default_phybin_config =
       , inputs = []
       , do_graph = False
       , do_draw = False
-      , clust_mode = BinThem
+--      , clust_mode = BinThem
+      , clust_mode = ClusterThem C.UPGMA
 #ifdef USE_HASHRF
       , use_hashrf = True
 #else

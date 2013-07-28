@@ -29,7 +29,6 @@ import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
 import           System.IO           (openFile, hClose, IOMode(ReadMode), stderr,
                                       hPutStr, hPutStrLn)
-import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
 

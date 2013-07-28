@@ -14,7 +14,7 @@ module Bio.Phylogeny.PhyBin
 
 import qualified Data.Foldable as F
 import           Data.Function       (on)
-import           Data.List           (delete, minimumBy, sortBy, foldl1', foldl', intersperse)
+import           Data.List           (delete, minimumBy, sortBy, foldl1', foldl', intersperse, isPrefixOf)
 import           Data.Maybe          (fromMaybe)
 import           Data.Either         (partitionEithers)
 import           Data.Time.Clock
@@ -29,9 +29,10 @@ import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
 import           System.FilePath     (combine)
-import           System.Directory    (doesFileExist, doesDirectoryExist,
+import           System.Directory    (doesFileExist, doesDirectoryExist, createDirectoryIfMissing,
                                       getDirectoryContents, getCurrentDirectory)
 import           System.IO           (openFile, hClose, IOMode(..), stdout)
+import           System.Info         (os)
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
@@ -85,17 +86,18 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     --putStrLn$ "PHYBIN RUNNING IN DIRECTORY: "++ cd
 
     bl <- doesDirectoryExist output_dir
-    unless bl $ do
-      c <- system$ "mkdir -p "++output_dir
-      case c of
-        ExitSuccess     -> return ()
-        ExitFailure cde -> error$"Could not create output directory. 'mkdir' command failed with: "++show cde
+    unless bl $ createDirectoryIfMissing True output_dir
 
-    putStrLn$ "Cleaning away previous phybin outputs..."
-    system$ "rm -f "++output_dir++"/dendrogram.*"
-    system$ "rm -f "++output_dir++"/cluster*"
-    system$ "rm -f "++output_dir++"/distance_matrix.txt"
-    system$ "rm -f "++output_dir++"/WARNINGS.txt"
+    if isPrefixOf "mingw" os then
+      -- TODO: Need a portable version of this.  'filemanip' would do:
+      putStrLn$ "Not cleaning away previous phybin outputs (TODO: port this to Windows)."
+     else do 
+      putStrLn$ "Cleaning away previous phybin outputs..."
+      system$ "rm -f "++output_dir++"/dendrogram.*"
+      system$ "rm -f "++output_dir++"/cluster*"
+      system$ "rm -f "++output_dir++"/distance_matrix.txt"
+      system$ "rm -f "++output_dir++"/WARNINGS.txt"
+      return ()
 
     putStrLn$ "Parsing "++show (length files)++" Newick tree files."
     --putStrLn$ "\nFirst ten \n"++ concat (map (++"\n") $ map show $ take 10 files)
