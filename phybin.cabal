@@ -49,7 +49,7 @@ Source-repository head
 
 Flag hashrf
   description: Use the HashRF algorithm by default instead of the naive one.
-  default: False
+  default: True
 
 Flag bitvec
   description: Use bitvectors rather than IntSets for bipartitions.
