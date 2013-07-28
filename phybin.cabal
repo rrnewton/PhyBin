@@ -77,7 +77,7 @@ Library
                      HUnit, bytestring, 
                      -- For bytestring.lazy support:
                      parsec >= 3.1.0, 
-                     bitvec >= 0.1, vector >= 0.10,
+                     vector >= 0.10,
                      hierarchical-clustering >= 0.4, split >= 0.2
 --                     lattice-par, 
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
@@ -86,6 +86,7 @@ Library
      CPP-Options: -DUSE_HASHRF
   if flag(bitvec)
      CPP-Options: -DBITVEC_BIPS
+     Build-Depends:  bitvec >= 0.1
   if flag(sequential)
      CPP-Options: -DSEQUENTIALIZE
 
@@ -102,7 +103,7 @@ Executable phybin
                      HUnit, bytestring, 
                      -- For bytestring.lazy support:
                      parsec >= 3.1.0, 
-                     bitvec >= 0.1, vector >= 0.10,
+                     vector >= 0.10,
                      hierarchical-clustering >= 0.4, split >= 0.2
 --                     lattice-par, 
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
@@ -111,5 +112,6 @@ Executable phybin
      CPP-Options: -DUSE_HASHRF
   if flag(bitvec)
      CPP-Options: -DBITVEC_BIPS
+     Build-Depends:  bitvec >= 0.1
   if flag(sequential)
      CPP-Options: -DSEQUENTIALIZE

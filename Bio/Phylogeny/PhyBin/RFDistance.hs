@@ -28,8 +28,6 @@ import qualified Data.Vector                 as V
 import qualified Data.Vector.Mutable         as MV
 import qualified Data.Vector.Unboxed.Mutable as MU
 import qualified Data.Vector.Unboxed         as U
-import qualified Data.Vector.Unboxed.Bit     as UB
-import qualified Data.Bit                    as B
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           System.IO.Unsafe
@@ -52,6 +50,11 @@ import qualified Data.Traversable as T
 import           Data.Monoid
 import           Prelude as P
 import           Debug.Trace
+
+#ifdef BITVEC_BIPS
+import qualified Data.Vector.Unboxed.Bit     as UB
+import qualified Data.Bit                    as B
+#endif
 
 -- I don't understand WHY, but I seem to get the same answers WITHOUT this.
 -- Normalization and symmetric difference do make things somewhat slower (e.g. 1.8
