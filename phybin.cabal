@@ -68,7 +68,7 @@ Library
                      Bio.Phylogeny.PhyBin.Util
                      Bio.Phylogeny.PhyBin.Visualize
 --  Other-modules:     Data.BitList
-  Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
+  Build-Depends:     base >= 3 && < 5, directory, process, containers, 
                      async, time,
                      filepath, 
                      graphviz >= 2999.16, 
@@ -93,7 +93,7 @@ Executable phybin
   Main-is:           Main.hs
   Build-Depends:     phybin
   -- DUPLICATE:
-  Build-Depends:     base >= 3 && < 5, directory, process, containers, unix, 
+  Build-Depends:     base >= 3 && < 5, directory, process, containers, 
                      async, time,
                      filepath, 
                      graphviz >= 2999.16, 
