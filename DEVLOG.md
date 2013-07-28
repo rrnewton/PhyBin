@@ -139,6 +139,9 @@ taxa, I still get the error.
 
 
 [2013.07.27] {Timing Phylip on wasp (3.33ghz nehalem)}
+======================================================
+
+Note, DendroPy also does branch-length collapsing.
 
 100 Trees (157 taxa):
 ---------------------
@@ -177,8 +180,6 @@ adversely affecting the time for the core rfdist computation.
 Times on hive, 32-core westmere
 -------------------------------
 
- * hashrf, 1 thread: 1.669s to compute matrix. 
-
  * 1 thread: 
  * 2 thread: 2.97s
  * 4 thread: 1.85
@@ -188,6 +189,17 @@ Times on hive, 32-core westmere
   
 It's probably getting blocked on Blackholes.
 
+Here one the non-phybin numbers:
+
+1000 trees:
+ * hashrf, 1 thread: 1.669s to compute matrix. 
+
+100 trees:
+ * dendropy: 12.79s
+ * phylip: 71s (oh, that didn't build with -O2 by default) in -O2 it is 22.06 seconds
+ * hashrf: 56ms
+ * phybin: 269ms
+ * phybin(naive): 2.85s
 
 Testing SLMap/SLSet... prob not ready yet
 -----------------------------------------
