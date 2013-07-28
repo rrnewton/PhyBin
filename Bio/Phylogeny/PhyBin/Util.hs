@@ -32,7 +32,6 @@ import           System.IO           (openFile, hClose, IOMode(ReadMode), stderr
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
-import qualified HSH 
 
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
@@ -90,11 +89,12 @@ acquireTreeFiles inputs = do
 
       --stat   <- if exists then getFileStatus path else return (error "internal invariant")
       -- [2010.09.23] This is no longer really necessary:
-      if not exists then do 
-	 hPutStr stderr$ "Input not a file/directory, assuming wildcard, using 'find' for expansion"
-	 entries <- HSH.run$ "find " ++ path	 
-	 hPutStrLn stderr$ "("++show (length entries)++" files found):  "++ show path
-	 return entries
+      if not exists then do
+        error$ "No file or directory found at this path!: "++path
+	 -- hPutStr stderr$ "Input not a file/directory, assuming wildcard, using 'find' for expansion"
+	 -- entries <- HSH.run$ "find " ++ path	 
+	 -- hPutStrLn stderr$ "("++show (length entries)++" files found):  "++ show path
+	 -- return entries
        else do
 	 isdir <- is_directory path
 	 reg  <- is_regular_file path
