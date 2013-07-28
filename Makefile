@@ -29,7 +29,7 @@ clean:
 launch: doc distro push upload
 
 doc:
-	pandoc -s -S --toc -c website.css README.txt -o website/index.html
+	pandoc -s -S --toc -c website.css README.md -o website/index.html
 
 distro:
 	cabal sdist
@@ -37,21 +37,6 @@ distro:
 
 # HASKELLSRV=haskell.intel
 HASKELLSRV=community.haskell.org
-
-upload:
-	rsync -vrplt website/ rrnewton@$(HASKELLSRV):/srv/code/phybin/; ssh rrnewton@$(HASKELLSRV) ./setperms.sh
-#	ssh rrnewton@$(HASKELLSRV) chmod o+r -R '/srv/code/phybin/*'
-#	scp -pr website/* rrnewton@$(HASKELLSRV):/srv/code/phybin/
-#	scp -pr website rrnewton@haskell.intel:
-
-push:
-#	hg push ssh://rrnewton@community.haskell.org/phybin/repo/ --remotecmd '~/bin/hg'
-# Problem: Different versions of darcs right now
-#	darcs push -a rrnewton@community.haskell.org:phybin/repo/
-	darcs push -a ./website/repo/
-
-
-
 
 
 ################################################################################
