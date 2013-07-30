@@ -297,7 +297,7 @@ hashRF num_taxa trees = do
       F.traverse_ fn bips
 
     -- Second, ingest the table to construct the distance matrix:
-    ingest :: M.Map DenseLabelSet (Snapshot IS.ISet Int) -> PIO.ParIO DistanceMatrix2
+    ingest :: IM.Map DenseLabelSet (Snapshot IS.ISet Int) -> PIO.ParIO DistanceMatrix2
     ingest bipTable = theST
       where
        theST = do 
@@ -336,9 +336,15 @@ hashRF num_taxa trees = do
 --                 trace ("Computed donthave "++ show dontHave) $ 
                  traverseDense_2 fn1 haveIt
 --        parForTiled 16 (0,M.size bipTable) $ \ix -> do
-        PC.parFor (PC.InclusiveRange 0 (M.size bipTable - 1)) $ \ix -> do
+{-
+        PC.parFor (PC.InclusiveRange 0 (IM.size bipTable - 1)) $ \ix -> do
           -- liftIO$ F.traverse_ fn bipTable
           liftIO$ fn (snd$ M.elemAt ix bipTable)
+-}
+-- TODO: Restore parallelism:
+        let fn2 () _k x = liftIO$ fn x
+        IM.foldWithKeyM fn2 () bipTable
+
         liftIO$ do
           v1 <- V.unsafeFreeze matr
           T.traverse (SV.unsafeFreeze) v1

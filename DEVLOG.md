@@ -180,7 +180,7 @@ adversely affecting the time for the core rfdist computation.
 Times on hive, 32-core westmere
 -------------------------------
 
- * 1 thread: 
+ * 1 thread: 4.7s (2.7,2.0)
  * 2 thread: 2.97s
  * 4 thread: 1.85
  * 6 thread: 1.75s
