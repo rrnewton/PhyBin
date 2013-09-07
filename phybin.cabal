@@ -62,10 +62,11 @@ Flag sequential
 
 Library
   Exposed-modules:   Bio.Phylogeny.PhyBin
-                     Bio.Phylogeny.PhyBin.RFDistance
-                     Bio.Phylogeny.PhyBin.Parser
-                     Bio.Phylogeny.PhyBin.CoreTypes
                      Bio.Phylogeny.PhyBin.Binning
+                     Bio.Phylogeny.PhyBin.CoreTypes                     
+                     Bio.Phylogeny.PhyBin.Parser
+                     Bio.Phylogeny.PhyBin.PreProcessor
+                     Bio.Phylogeny.PhyBin.RFDistance  
                      Bio.Phylogeny.PhyBin.Util
                      Bio.Phylogeny.PhyBin.Visualize
 --  Other-modules:     Data.BitList
