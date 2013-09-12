@@ -1,6 +1,9 @@
 {-# LANGUAGE RecordWildCards, TupleSections, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 
+-- | The MAIN module, of course.  This is the script that deals with
+-- command line options and calling into the heart of the beast.
+
 module Main where
 import           Data.List (sort, intersperse, foldl')
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -15,7 +18,8 @@ import           System.Exit           (exitSuccess)
 import           System.IO             (stdout) 
 import           Test.HUnit            (runTestTT, Test, test, (~:))
 
-import Control.Applicative ((<$>))
+import           Control.Applicative ((<$>))
+import           Control.Exception (catch, SomeException)
 import qualified Data.Vector                 as V
 import           Test.HUnit                  as HU
 
@@ -27,7 +31,7 @@ import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabL
                                        unitTests, acquireTreeFiles, deAnnotate,
                                        retrieveHighlights, matchAnyHighlight)
 import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
-import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree, dotNewickTree_debug)
+import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree) -- dotNewickTree_debug
 import Bio.Phylogeny.PhyBin.RFDistance 
 import Bio.Phylogeny.PhyBin.PreProcessor
 
@@ -322,9 +326,14 @@ main =
      -- Otherwise do the main, normal thing:
      driver config
 
+-- | Completely optional visualization step.  If this fails, we don't
+-- sweat it.
 view_graphs :: PhyBinConfig -> IO ()
-view_graphs PBC{..} = 
-           do chans <- forM inputs $ \ file -> do 
+view_graphs PBC{..} = catch act hndl
+ where
+  hndl :: SomeException -> IO ()
+  hndl exn = putStrLn$ "Warning: Viewing graph failed, ignoring.  Error was: "++show exn
+  act  =   do chans <- forM inputs $ \ file -> do 
                 putStrLn$ "Drawing "++ file ++"...\n"
 		str <- B.readFile file
 		putStrLn$ "Parsed: " ++ (B.unpack str)

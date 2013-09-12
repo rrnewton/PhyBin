@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 -- | This module contains the code that does the tree normalization and binning.
---   It's the heart of the prgoram.
+--   It's the heart of the program.
 
 module Bio.Phylogeny.PhyBin
        ( driver, binthem, normalize, annotateWLabLists, unitTests, acquireTreeFiles,
