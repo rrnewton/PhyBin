@@ -470,7 +470,7 @@ type TempDecor = (Double, (Int, Int), Int, [Label])
 
 avg ls = sum ls / fromIntegral (length ls)
 
--- | Parse trees in addition to the main inputs (for --highlight).
+-- | Parse extra trees in addition to the main inputs (for --highlight).
 retrieveHighlights :: (String->String) -> LabelTable -> [FilePath] -> IO [[NewickTree ()]]
 retrieveHighlights name_hack labelTab ls =
   mapM parseHighlight ls

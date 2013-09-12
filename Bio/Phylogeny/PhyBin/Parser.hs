@@ -45,6 +45,7 @@ parseNewick tbl0 name_hack file input =
 -- | Parse a list of trees, starting with an empty map of labels and accumulating a final map.
 parseNewickFiles :: NameHack -> [String] -> IO (LabelTable, [FullTree DefDecor])
 parseNewickFiles fn nms = do
+  -- WARNING: Lazy-IO here.  We need to be careful about leaking file descriptors.
   bss <- mapM B.readFile nms
   return $ parseNewicks fn (zip nms bss)
 
