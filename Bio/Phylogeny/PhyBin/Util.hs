@@ -17,7 +17,6 @@ import qualified Data.Foldable as F
 import           Data.Function       (on)
 import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort)
 import           Data.Maybe          (fromMaybe, catMaybes)
-import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
 import           Control.Monad       (forM, forM_, filterM, when, unless)

@@ -6,7 +6,7 @@
 
 module Main where
 import           Data.List (sort, intersperse, foldl')
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.IntSet as IS

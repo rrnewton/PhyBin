@@ -18,7 +18,7 @@ import           Data.List           (delete, minimumBy, sortBy, foldl1', foldl'
 import           Data.Maybe          (fromMaybe)
 import           Data.Either         (partitionEithers)
 import           Data.Time.Clock
-import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.ByteString.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
 import qualified Data.Vector                 as V
