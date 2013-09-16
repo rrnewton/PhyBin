@@ -9,7 +9,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          -- * Tree and tree decoration types
          NewickTree(..), 
          DefDecor, StandardDecor(..), AnnotatedTree, FullTree(..),
-         ClustMode(..), TreeName,
+         ClustMode(..), TreeName, NumTaxa(..),
          
          -- * Tree operations
          displayDefaultTree, displayStrippedTree, 
@@ -211,7 +211,7 @@ instance Pretty StandardDecor where
 -- | Due to the number of configuration options for the driver, we pack them into a record.
 data PhyBinConfig = 
   PBC { verbose :: Bool
-      , num_taxa :: Int
+      , num_taxa :: NumTaxa
       , name_hack :: String -> String
       , output_dir :: String
       , inputs :: [String]
@@ -227,11 +227,19 @@ data PhyBinConfig =
       , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
       }
 
+-- | How many taxa should we expect in the incoming dataset?
+data NumTaxa = Expected Int  -- ^ Supplied by the user.  Committed.
+             | Unknown       -- ^ In the future we may automatically pick a behavior.  Now this one is usually an error.
+             | Variable      -- ^ Explicitly ignore this setting in favor of comparing all trees
+                             --   (even if some are missing taxa).  This only works with certain modes.
+  deriving (Show, Read, Eq)
+               
 -- | The default phybin configuration.
 default_phybin_config :: PhyBinConfig
 default_phybin_config = 
  PBC { verbose = False
-      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually with -n.)"
+--      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually with -n.)"
+      , num_taxa  = Unknown
       , name_hack = id -- Default, no transformation of leaf-labels
       , output_dir = "./phybin_out/"
       , inputs = []

@@ -25,7 +25,7 @@ import           Test.HUnit                  as HU
 import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
-import Bio.Phylogeny.PhyBin.CoreTypes          
+import Bio.Phylogeny.PhyBin.CoreTypes 
 import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists,
                                        unitTests, acquireTreeFiles, deAnnotate,
                                        retrieveHighlights, matchAnyHighlight)
@@ -48,7 +48,7 @@ data Flag
     = Verbose  
     | Version 
     | Output String
-    | NumTaxa Int
+    | SetNumTaxa Int
     | BranchThresh Double      
     | NullOpt
     | Graph | Draw
@@ -129,13 +129,13 @@ options =
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "---------------------------- Tree pre-processing -----------------------------"
 
-     , Option ['n']     ["numtaxa"] (ReqArg (NumTaxa . read) "NUM") "expect NUM taxa for this dataset"
+     , Option ['n']     ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM") "expect NUM taxa for this dataset"
 
      , Option ['b']     ["branchcut"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
               
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Extracting taxa names ----------------------------"
---     , Option ['n']     ["numtaxa"] (ReqArg (NumTaxa . read) "NUM") "expect NUM taxa for this dataset (otherwise it will guess)"
+--     , Option ['n']     ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM") "expect NUM taxa for this dataset (otherwise it will guess)"
        --  TODO, FIXME: The "guessing" part doesn't actually work yet -- implement it!!
        --  What's a good algorithm?  Insist they all have the same number?  Take the mode?
        
@@ -258,7 +258,7 @@ main =
      
 	   Output s -> return cfg { output_dir= s }
 
-	   NumTaxa n -> return cfg { num_taxa= n }
+	   SetNumTaxa n -> return cfg { num_taxa= Expected n }
      	   BranchThresh n -> return cfg { branch_collapse_thresh= Just n }
 	   Graph     -> return cfg { do_graph= True } 
 	   Draw	     -> return cfg { do_draw = True } 
@@ -299,14 +299,17 @@ main =
            liftFT (normalize . annotateWLabLists) ft
        exitSuccess
      ------------------------------------------------------------
-     when (elem PrintConsensus opts) $ do 
-       (_,fts) <- parseNewickFiles (name_hack config) all_inputs
-       putStrLn $ "Strict Consensus Tree of "++show (length fts)++" trees:"
-       when (null fts) $ error "No trees provided!"
-       let ctree = consensusTree (num_taxa config) (map nwtree fts)
-           FullTree{labelTable} = head fts
-       print$ displayStrippedTree$ FullTree "" labelTable ctree
-       exitSuccess       
+     when (elem PrintConsensus opts) $
+       case (num_taxa config) of
+         Expected numtax -> do 
+           (_,fts) <- parseNewickFiles (name_hack config) all_inputs
+           putStrLn $ "Strict Consensus Tree of "++show (length fts)++" trees:"
+           when (null fts) $ error "No trees provided!"
+           let ctree = consensusTree numtax (map nwtree fts)
+               FullTree{labelTable} = head fts
+           print$ displayStrippedTree$ FullTree "" labelTable ctree
+           exitSuccess
+         _ -> error "--consensus: cannot compute consensus when number of taxa is unknown or variable"
      ------------------------------------------------------------
      when (elem PrintMatching opts) $ do 
        (labs,fts) <- parseNewickFiles (name_hack config) all_inputs
@@ -372,7 +375,7 @@ name_table_reader file =
         (one:rest) -> [one, unwords rest]
 
 temp :: IO ()
-temp = driver default_phybin_config{ num_taxa=7, inputs=["../datasets/test.tr"] }
+temp = driver default_phybin_config{ num_taxa= Expected 7, inputs=["../datasets/test.tr"] }
 
 
 --------------------------------------------------------------------------------

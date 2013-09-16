@@ -142,7 +142,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 	   --      	   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
            --                       show (map get_weight$ get_children normal)
 
-           if numL /= num_taxa
+           if Expected numL /= num_taxa
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
 					    ++ show numL ++"): "++ treename
@@ -272,14 +272,16 @@ doBins validtrees = do
 	          binthem validtrees
     return (classes)
 
-doCluster :: Bool -> Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
+doCluster :: Bool -> NumTaxa -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
 doCluster use_hashrf num_taxa linkage validtrees = do
   t0 <- getCurrentTime
   when use_hashrf$ putStrLn " Using HashRF-style algorithm..."
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees
       mat = if use_hashrf 
-            then hashRF num_taxa nwtrees
+            then case num_taxa of
+                  Expected n -> hashRF n nwtrees
+                  _          -> error "--hashrf option requires that expected number of taxa be specified"
             else fst (naiveDistMatrix nwtrees)
       ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
@@ -354,8 +356,8 @@ sliceDendro dstThresh den = loop den
 --------------------------------------------------------------------------------
 
 -- outputClusters :: (Num a1, Ord a1, Show a1) => Int -> [(a1, t, OneCluster a)] -> String -> Bool -> IO ()
-outputClusters :: Int -> [(Int, OneCluster a)] -> String -> Bool -> IO (Async ())
-outputClusters num_taxa binlist output_dir do_graph = do
+outputClusters :: NumTaxa -> [(Int, OneCluster a)] -> String -> Bool -> IO (Async ())
+outputClusters (Expected num_taxa) binlist output_dir do_graph = do
     let numbins = length binlist
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
     let consTrs = [ FullTree "consensus" (labelTable $ head ftrees) nwtr 
@@ -384,6 +386,8 @@ outputClusters num_taxa binlist output_dir do_graph = do
         mapM_ wait asyncs
         putStrLn$ " [finished] Wrote visual representations of consensus trees to "++filePrefix++"<N>_<size>.pdf"
      else async (return ())
+
+outputClusters num_taxa _ _ _  = error "outputClusters: cannot produce a consensus tree when num_taxa is unknown or variable."
 
 outputBins :: [(Int, OneCluster StandardDecor)] -> String -> Bool -> IO (Async ())
 outputBins binlist output_dir  do_graph = do
