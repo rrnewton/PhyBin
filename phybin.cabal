@@ -38,7 +38,7 @@ Description:
    generating GraphViz-based visual representations of the tree topologies).
 
 Category: Bioinformatics
-Cabal-Version: >=1.8
+Cabal-Version: >= 1.8
 
 Extra-source-files: README.md
 

@@ -105,6 +105,7 @@ instance (Pretty k, Pretty v) => Pretty (M.Map k v) where
   pPrint mp = pPrint (M.toList mp)
 
 -- | Display a tree WITH the bootstrap and branch lengths.
+--   This prints in NEWICK format.
 displayDefaultTree :: FullTree DefDecor -> Doc
 displayDefaultTree orig = loop tr <> ";"
   where
@@ -117,6 +118,8 @@ displayDefaultTree orig = loop tr <> ";"
          Just val -> base <> text ":[" <> text (show val) <> text "]"
       where base = parens$ sep$ map_but_last (<>text",") $ map loop ls
 
+-- | The same, except with no bootstrap or branch lengths.  Any tree annotations
+-- ignored.
 displayStrippedTree :: FullTree a -> Doc
 displayStrippedTree orig = loop tr <> ";"
   where

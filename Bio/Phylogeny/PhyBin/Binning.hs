@@ -15,32 +15,19 @@ module Bio.Phylogeny.PhyBin.Binning
        )
        where
 
-import qualified Data.Foldable as F
 import           Data.Function       (on)
 import           Data.List           (delete, minimumBy, sortBy, insertBy, intersperse, sort)
-import           Data.Maybe          (fromMaybe, catMaybes)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map                   as M
-import qualified Data.Set                   as S
-import           Control.Monad       (forM, forM_, filterM, when, unless)
-import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
-import           System.FilePath     (combine)
-import           System.Directory    (doesFileExist, doesDirectoryExist,
-                                      getDirectoryContents, getCurrentDirectory)
-import           System.IO           (openFile, hClose, IOMode(ReadMode))
-import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
 
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewicks, parseNewick)
-import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranches)
-import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
-import           Bio.Phylogeny.PhyBin.RFDistance
-import           Bio.Phylogeny.PhyBin.Util
+import           Bio.Phylogeny.PhyBin.Visualize (dotNewickTree, viewNewickTree)
 
 -- Turn on for extra invariant checking:
 debug :: Bool
@@ -407,8 +394,8 @@ unitTests =
 
    -- Make sure that all of these normalize to the same thing.
    , "normalize1" ~: "(C, D, E, (A, B))" ~=?  show (displayDefaultTree $ deAnnotate$ norm "(A,(C,D,E),B);")
-   , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
-   , "normalize2" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
+   , "normalize2A" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "((C,D,E),B,A);")
+   , "normalize2B" ~: "(C, D, E, (A, B))" ~=?  show (pPrint$ norm "(D,E,C,(B,A));")
 
    -- Here's an example from the rhizobia datasetsthat that caused my branch-sorting to fail.
    , "normalize3" ~:  "(((BB, BJ)), (MB, ML), (RE, (SD, SM)))" 

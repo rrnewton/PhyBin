@@ -14,7 +14,7 @@ module Bio.Phylogeny.PhyBin.RFDistance
          denseUnions, denseDiff, invertDense, markLabel,
          
         -- * Methods for computing distance matrices
-        distanceMatrix, hashRF, 
+        naiveDistMatrix, hashRF, 
 
         -- * Output
         printDistMat)
@@ -155,14 +155,19 @@ type DistanceMatrix = V.Vector (U.Vector Int)
 
 -- | Returns a triangular distance matrix encoded as a vector.
 --   Also return the set-of-BIPs representation for each tree.
-distanceMatrix :: [NewickTree a] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
-distanceMatrix lst = 
+--
+--   This uses a naive method, directly computing the pairwise
+--   distance between each pair of trees.
+naiveDistMatrix :: [NewickTree a] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
+naiveDistMatrix lst = 
    let sz = P.length lst
        eachbips = V.fromList $ map allBips lst
        mat = V.generate sz $ \ i ->        
              U.generate i  $ \ j ->
-             let diff1 = S.size (S.difference (eachbips V.! i) (eachbips V.! j))
-                 diff2 = S.size (S.difference (eachbips V.! j) (eachbips V.! i))
+             let trI = (eachbips V.! i)
+                 trJ = (eachbips V.! j)
+                 diff1 = S.size (S.difference trI trJ)
+                 diff2 = S.size (S.difference trJ trI)
              in diff1 + diff2
    in (mat, eachbips)
 
@@ -305,37 +310,6 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
         T.traverse (U.unsafeFreeze) v1
 
 
-#if 0
--- | Returns a (square) distance matrix encoded as a vector.
-distanceMatrix :: [AnnotatedTree] -> IO (U.Vector Word)
-distanceMatrix lst = do 
---   IM.IMapSnap (table :: M.Map DenseLabelSet (S.Set TreeID)) <- runParThenFreeze par
---   IM.IMapSnap (table :: M.Map DenseLabelSet (Snapshot IS.ISet TreeID)) <- runParThenFreeze par
-   IM.IMapSnap table <- runParThenFreeze par
-   let sz = P.length lst
-   v <- MU.replicate (sz*sz) (0::Word)
-   let fn set () =
-         
-   F.foldrM 
-   undefined
-  
-  -- runParThenFreeze -- get bip table
-  -- followed by ... fill matrix from bip table  
-  where
-    par = do   
-     table <- IM.newEmptyMap 
-     forM_ lst (insertBips table)
-     return table
-
-insertBips :: BipTable s -> AnnotatedTree -> Par d s ()
-insertBips table tree = do
-    let bips = allBips tree
-        fn bip () = do
-          IM.modify table bip (IS.putInSet tree)
-          return ()
-    F.foldrM fn () bips 
-#endif
-
 --------------------------------------------------------------------------------
 -- Miscellaneous Helpers
 --------------------------------------------------------------------------------
@@ -372,13 +346,18 @@ filterCompatible consensus trees =
     [ tr | tr <- trees
          , cbips `S.isSubsetOf` allBips tr ]
 
--- | Is a tree compatible with a consensus?
+-- | `compatibleWith consensus tree` -- Is a tree compatible with a consensus?
 --   This is more efficient if partially applied then used repeatedly.
+-- 
+-- Note, tree compatibility is not the same as an exact match.  It's
+-- like (<=) rather than (==).  The "star topology" is consistent with the
+-- all trees, because it induces the empty set of bipartitions.  
 compatibleWith :: NewickTree a -> NewickTree b -> Bool
-compatibleWith consensus newTr =
-  S.isSubsetOf (allBips consensus) (allBips newTr)
+compatibleWith consensus =
+  let consBips = allBips consensus in 
+  \ newTr -> S.isSubsetOf consBips (allBips newTr)
 
--- Consensus between two trees, which may even have different label maps.
+-- | Consensus between two trees, which may even have different label maps.
 consensusTreeFull (FullTree n1 l1 t1) (FullTree n2 l2 t2) =
   error "FINISHME - consensusTreeFull"
 

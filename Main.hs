@@ -9,7 +9,6 @@ import           Data.List (sort, intersperse, foldl')
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
-import qualified Data.IntSet as IS
 import           Control.Monad
 import           Control.Concurrent    (Chan, readChan, ThreadId, forkIO)
 import           System.Environment    (getArgs, withArgs)
@@ -194,7 +193,7 @@ usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
 
         "When clustering trees, Phybin computes a complete all-to-all Robinson-Foulds distance matrix.\n"++
         "If a threshold distance (tree edit distance) is given, then a flat set of clusters\n"++
-        "will be produced in files clusterXX_YY.tr.  Otherwise it produces a full dendogram (UNFINISHED).\n"++
+        "will be produced in files clusterXX_YY.tr.  Otherwise it produces a full dendogram.\n"++
         "\n"++  
 
         "Binning mode provides an especially quick-and-dirty form of clustering.\n"++
@@ -387,7 +386,9 @@ allUnitTests = test
   , Bio.Phylogeny.PhyBin.Parser.unitTests
   , "norm/Bip1" ~: (testNorm prob1)
   , "bipTreeConversion" ~: testBipConversion
-  , "t3" ~: t3_consensusTest, "t4" ~: t4_consensusTest, "t5" ~: t5_consensusTest
+  , "t3" ~: t3_consensusTest,
+    "t4" ~: t4_consensusTest,
+    "t5" ~: t5_consensusTest
   ]
 
 -- [2013.07.23]      
@@ -434,7 +435,7 @@ rftest = do
   putStrLn$ "13  collapsed 0.03: " ++show (disp$ liftFT (collapseBranchLenThresh 0.03) t1)
   putStrLn$ "112 collapsed 0.03: " ++show (disp$ liftFT (collapseBranchLenThresh 0.03) t2)  
 
-  let (mat,_) = distanceMatrix [nwtree t1, nwtree t2]
+  let (mat,_) = naiveDistMatrix [nwtree t1, nwtree t2]
   printDistMat stdout mat
   return ()
  where
@@ -487,7 +488,7 @@ consensusTest alltrees consensus = do
          cbips cbips2 -- (allBips$ fmap (const ()) $ nwtree ctree)         
   
   putStrLn " Partial distance matrix WITHIN this cluster:"
-  let (mat,_) = distanceMatrix (map nwtree ftrees)
+  let (mat,_) = naiveDistMatrix (map nwtree ftrees)
   printDistMat stdout (V.take 30 mat)
   HU.assertBool "Consensus should only include bicbips2ps in the members" (S.isSubsetOf cbips totalBips)
   HU.assertEqual "Consensus tree matches intersected bips" cbips intersectBips 

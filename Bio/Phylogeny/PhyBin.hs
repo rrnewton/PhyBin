@@ -15,7 +15,7 @@ module Bio.Phylogeny.PhyBin
 import qualified Data.Foldable as F
 import           Data.Function       (on)
 import           Data.List           (delete, minimumBy, sortBy, foldl1', foldl', intersperse, isPrefixOf)
-import           Data.Maybe          (fromMaybe)
+import           Data.Maybe          (fromMaybe, catMaybes)
 import           Data.Either         (partitionEithers)
 import           Data.Time.Clock
 import qualified Data.ByteString.Char8 as B
@@ -127,7 +127,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
       Nothing  -> return ()
 
-    let do_one :: FullTree DefDecor -> IO (Int, [FullTree DefDecor], [(Int, String)])
+    let do_one :: FullTree DefDecor -> IO (Int, [FullTree DefDecor], Maybe (Int, String))
         do_one (FullTree treename lblAcc parsed) = do 
            let 
                pruned = case branch_collapse_thresh of 
@@ -146,15 +146,15 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
 					    ++ show numL ++"): "++ treename
-		    return (0, [], [(numL, treename)])
+		    return (0, [], Just (numL, treename))
 	    else do 
 	     when verbose$ putStr "."
-	     return$ (numL, [FullTree treename lblAcc pruned], [])
+	     return$ (numL, [FullTree treename lblAcc pruned], Nothing)
 
     results <- mapM do_one fulltrees
-    let (counts::[Int], validtreess, pairs::[[(Int, String)]]) = unzip3 results
+    let (counts::[Int], validtreess, pairs:: [Maybe (Int, String)]) = unzip3 results
     let validtrees = concat validtreess
-        warnings2 = concat pairs
+        warnings2  = catMaybes pairs
         
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
     when (length warnings2 > 0) $
@@ -280,7 +280,7 @@ doCluster use_hashrf num_taxa linkage validtrees = do
       numtrees = length validtrees
       mat = if use_hashrf 
             then hashRF num_taxa nwtrees
-            else fst (distanceMatrix nwtrees)
+            else fst (naiveDistMatrix nwtrees)
       ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
 --                         | i == numtrees-1 = 0 
@@ -486,6 +486,10 @@ retrieveHighlights name_hack labelTab ls =
 
 -- | Create a predicate that tests trees for consistency with the set of --highlight
 -- (consensus) trees.
+--
+-- Note, tree consistency is not the same as an exact match.  It's
+-- like (<=) rather than (==).  All trees are consistent with the
+-- "star topology".
 matchAnyHighlight :: [[NewickTree ()]] -> NewickTree () -> Bool      
 -- matchAnyHighlight :: [[NewickTree ()]] -> NewickTree () -> Maybe Int
 -- If there is a match, return the index of the highlight that matched.
