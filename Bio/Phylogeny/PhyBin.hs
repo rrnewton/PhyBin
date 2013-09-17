@@ -37,9 +37,11 @@ import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
 import qualified Data.Clustering.Hierarchical as C
+import qualified Data.GraphViz        as Gv 
 
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
+import           Data.GraphViz.Printing (renderDot)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick, parseNewicks)
 import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranchLenThresh, collapseBranchBootStrapThresh)
@@ -47,6 +49,7 @@ import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNe
 import           Bio.Phylogeny.PhyBin.RFDistance
 import           Bio.Phylogeny.PhyBin.Binning
 import           Bio.Phylogeny.PhyBin.Util
+
 
 import Debug.Trace
 ----------------------------------------------------------------------------------------------------
@@ -207,13 +210,23 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
         let plotIt mnameMap = 
               if True -- do_graph
               then async (do
-                putStrLn$ " [async] creating task to plot dendrogram.pdf"
                 t0 <- getCurrentTime
                 let dot = dotDendrogram cfg "dendrogram" 1.0 dendro mnameMap highlightTrs
-                _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
-                t1 <- getCurrentTime          
-                putStrLn$ " [finished] Writing dendrogram diagram ("
-                          ++show(diffUTCTime t1 t0)++")")
+                -- Be wary of cycles, something appears to be buggy:
+                putStrLn$ " [async] writing dendrogram as a graph to dendrogram.dot"
+                -- writeFile (combine output_dir "dendrogram.dot") 
+                --           (show $ renderDot $ Gv.toDot dot)
+                mdotfile <- safePrintDendro dot
+                case mdotfile of
+                  Nothing  -> 
+                    putStrLn "WARNING: because we couldn't print it, we're not drawing the dendrogram either."
+                  Just str -> do
+                    writeFile (combine output_dir "dendrogram.pdf") str                  
+                    putStrLn$ " [async] next to plot dendrogram.pdf"
+                    _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
+                    t1 <- getCurrentTime          
+                    putStrLn$ " [finished] Writing dendrogram diagram ("
+                              ++show(diffUTCTime t1 t0)++")")
               else async (return ())
         case dist_thresh of
           Nothing -> do a <- plotIt Nothing
@@ -400,7 +413,7 @@ outputClusters num_taxa binlist output_dir do_graph = do
       async $ do
         mapM_ wait asyncs
         putStrLn$ " [finished] Wrote visual representations of consensus trees to "++filePrefix++"<N>_<size>.pdf"
-     else do putStrLn$ "NOT creating processes to build per-cluster visualizations. (Not asked to.)"
+     else do putStrLn$ "NOT creating processes to build per-cluster .pdf visualizations. (Not asked to.)"
              async (return ())
 
 outputBins :: [(Int, OneCluster StandardDecor)] -> String -> Bool -> IO (Async ())

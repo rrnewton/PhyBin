@@ -9,7 +9,7 @@
 
 module Bio.Phylogeny.PhyBin.Util
        ( 
-         is_regular_file, acquireTreeFiles
+         is_regular_file, acquireTreeFiles, safePrintDendro
        )
        where
 
@@ -29,6 +29,7 @@ import           System.Directory    (doesFileExist, doesDirectoryExist,
 import           System.IO           (openFile, hClose, IOMode(ReadMode), stderr,
                                       hPutStr, hPutStrLn)
 import           System.Exit         (ExitCode(..))
+import           System.Timeout      (timeout)
 import           Test.HUnit          ((~:),(~=?),Test,test)
 
 -- For vizualization:
@@ -38,6 +39,10 @@ import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 import           Bio.Phylogeny.PhyBin.RFDistance
 
+import qualified Data.Clustering.Hierarchical as C
+import qualified Data.Graph.Inductive as G
+import qualified Data.GraphViz        as Gv
+import  Data.GraphViz.Types.Canonical (nodeStmts, graphStatements)
 
 ----------------------------------------------------------------------------------------------------
 -- OS specific bits:
@@ -75,7 +80,6 @@ file_exists path =
      d <- doesDirectoryExist path
      return (f || d)
 
-
 --------------------------------------------------------------------------------
 
 -- | Expand out directories to find all the tree files.
@@ -106,4 +110,22 @@ acquireTreeFiles inputs = do
 	  else error$ "phybin: Unhandled input path: " ++ path
 
     return (concat all)
+
+--------------------------------------------------------------------------------
+
+-- Detect cycles:
+-- safePrintDendro :: C.Dendrogram (FullTree a) -> IO (Maybe String)
+safePrintDendro :: Gv.DotGraph G.Node -> IO (Maybe String)
+safePrintDendro dotg= do 
+--  putStrLn$ "Dendrogram graph size: "++ show (F.foldl' (\a _ -> a+1) 0 dotg)
+  mx <- timeout (2 * 1000 * 1000) $ do
+        putStrLn$ "Dendrogram graph, is directed?: "++ show (Gv.directedGraph dotg)
+        putStrLn$ "Dendrogram graph size: "++ show (length $ nodeStmts $ graphStatements dotg)
+        let str = show dotg
+        evaluate (length str)
+        return str
+  case mx of
+    Nothing -> do putStrLn "WARNING: DotGraph appears to be a cyclic structure.  This is probably a bug."
+                  return Nothing
+    _ -> return mx
 

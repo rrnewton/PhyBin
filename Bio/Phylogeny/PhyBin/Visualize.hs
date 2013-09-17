@@ -23,6 +23,8 @@ import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
 import qualified Data.GraphViz.Attributes.Colors   as GC
 import           Data.GraphViz.Attributes.Colors   (Color(RGB))
+import           Data.GraphViz.Printing (renderDot)
+
 -- import           Test.HUnit          ((~:),(~=?),Test,test)
 
 import           System.Timeout (timeout)
@@ -31,6 +33,8 @@ import qualified Data.Clustering.Hierarchical as C
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.RFDistance (filterCompatible, compatibleWith, consensusTree)
+
+import Debug.Trace
 
 ----------------------------------------------------------------------------------------------------
 -- Visualization with GraphViz and FGL:
@@ -70,7 +74,7 @@ toGraph2 (FullTree _ tbl tree) = G.run_ G.empty $ loop tree
 -- Dendrograms
  ----------------------------------------------------------------------------------------------------
 
--- | Some duplicated code with dotNewickTree.
+-- | Convert to a dotGraph.  Some duplicated code with dotNewickTree.
 dotDendrogram :: PhyBinConfig -> String -> Double -> C.Dendrogram (FullTree a) ->
                  Maybe (M.Map TreeName Int) -> [[NewickTree ()]] -> Gv.DotGraph G.Node
 dotDendrogram PBC{show_trees_in_dendro, show_interior_consensus}
@@ -273,6 +277,12 @@ myShowFloat fl =
 -- | Convert a .dot file to .pdf.
 dotToPDF :: Gv.DotGraph G.Node -> FilePath -> IO (Maybe FilePath)
 dotToPDF dot file = do
+
+  -- putStrLn "ATTEMPTING TO RENDER: "
+  -- print$ dot
+  -- putStrLn "IN .DOT FORMAT:"
+  -- print$ renderDot $ Gv.toDot dot
+  
   -- Very, very, annoyingly, the current Hackage graphviz library hangs indefinitely
   -- rather than erroring if Graphviz is not installed (Mac OS).
   x <- timeout defaultTimeout $ 
