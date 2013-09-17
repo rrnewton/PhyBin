@@ -4,6 +4,9 @@
 -- collapse short branch lengths.
 
 module Bio.Phylogeny.PhyBin.PreProcessor
+       ( collapseBranches,
+         collapseBranchLenThresh, collapseBranchBootStrapThresh
+       )
        where
 
 import  Bio.Phylogeny.PhyBin.CoreTypes 
@@ -11,6 +14,11 @@ import  Bio.Phylogeny.PhyBin.CoreTypes
 -- | Removes branches that do not meet a predicate, leaving a shallower, "bushier"
 --   tree.  This does NOT change the set of leaves (taxa), it only removes interior
 --   nodes.
+--
+--   `collapseBranches pred collapser tree` uses `pred` to test the meta-data to see
+--   if collapsing the intermediate node below the branch is necessary, and if it is,
+--   it uses `collapser` to reduce all the metadata for the collapsed branches into a
+--   single piece of metadata.
 collapseBranches :: forall a . (a -> Bool) -> (a -> a -> a) -> NewickTree a -> NewickTree a
 collapseBranches isCollapsable collapse origtr = final
   where    
@@ -40,10 +48,24 @@ collapseBranches isCollapsable collapse origtr = final
         ([], [thenode], thenode)
 
 
--- | A common configuration.  Collapse branches based on threshold.
+-- | A common configuration.  Collapse branches based on a length threshold.
 collapseBranchLenThresh :: Double -> NewickTree DefDecor -> NewickTree DefDecor
 -- collapseBranchLenThresh :: HasBranchLen a => Double -> NewickTree a -> NewickTree a    
 collapseBranchLenThresh thr tr =
   collapseBranches ((< thr) . getBranchLen) collapser tr
   where
-    collapser _dec1 _dec2  = (Nothing,0)
+    -- We REMOVE BootStraps as part of this process, they are not well-defined after this point.
+    collapser _intermediate@(_bt1, len1) _floatee@(_bt2, len2) =
+      (Nothing, len1 + len2)
+
+-- | A common configuration.  Collapse branches based on bootstrap values.
+collapseBranchBootStrapThresh :: Int -> NewickTree DefDecor -> NewickTree DefDecor
+-- collapseBranchLenThresh :: HasBranchLen a => Double -> NewickTree a -> NewickTree a    
+collapseBranchBootStrapThresh thr tr =
+  collapseBranches ((< thr) . getBoot) collapser tr
+  where
+    getBoot (Nothing,_)    = error$"collapseBranchBootStrapThresh: bootstrap value missing on tree node!\n"++
+                                   "They must be present if --minbootstrap is used."
+    getBoot (Just boot,_)  = boot
+    -- This had better happen BEFORE branch-length based collapsing is done:
+    collapser (_,len1) (_,len2)  = (Nothing, len1+len2)

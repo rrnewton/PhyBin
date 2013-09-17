@@ -225,6 +225,8 @@ data PhyBinConfig =
       , print_rfmatrix :: Bool
       , dist_thresh :: Maybe Int
       , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
+      , bootstrap_collapse_thresh :: Maybe Int
+        -- ^ BootStrap values less than this result in the intermediate node being collapsed.        
       }
 
 -- | How many taxa should we expect in the incoming dataset?
@@ -258,6 +260,7 @@ default_phybin_config =
       , print_rfmatrix = False
       , dist_thresh = Nothing
       , branch_collapse_thresh = Nothing
+      , bootstrap_collapse_thresh = Nothing
      }
 
 data ClustMode = BinThem | ClusterThem { linkage :: C.Linkage }

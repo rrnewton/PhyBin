@@ -42,7 +42,7 @@ import qualified Data.Clustering.Hierarchical as C
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick, parseNewicks)
-import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranchLenThresh)
+import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranchLenThresh, collapseBranchBootStrapThresh)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree, dotDendrogram)
 import           Bio.Phylogeny.PhyBin.RFDistance
 import           Bio.Phylogeny.PhyBin.Binning
@@ -75,7 +75,7 @@ data DendroPlus a = DPLeaf (FullTree a)
 -- | Driver to put all the pieces together (parse, normalize, bin)
 driver :: PhyBinConfig -> IO ()
 driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
-                do_graph, branch_collapse_thresh, highlights, 
+                do_graph, branch_collapse_thresh, bootstrap_collapse_thresh, highlights, 
                 dist_thresh, clust_mode, use_hashrf, print_rfmatrix } =
    -- Unused: do_draw
  do 
@@ -123,17 +123,25 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 --	      show (nest 2 $ sep $ map text $ M.elems labelTab)    
     --------------------------------------------------------------------------------
 
+    case bootstrap_collapse_thresh of
+      Just thr -> putStrLn$" !+ Collapsing branches of bootstrap value less than "++show thr
+      Nothing  -> return ()      
+
     case branch_collapse_thresh of 
       Just thr -> putStrLn$" !+ Collapsing branches of length less than "++show thr
       Nothing  -> return ()
 
     let do_one :: FullTree DefDecor -> IO (Int, [FullTree DefDecor], Maybe (Int, String))
         do_one (FullTree treename lblAcc parsed) = do 
-           let 
-               pruned = case branch_collapse_thresh of 
-                         Nothing  -> parsed
-                         Just thr -> collapseBranchLenThresh thr parsed
-               numL   = numLeaves pruned
+           let
+               -- Important: MUST collapse bootstrap first if we're doing both:
+               pruned0 = case bootstrap_collapse_thresh of
+                          Nothing  -> parsed
+                          Just thr -> collapseBranchBootStrapThresh thr parsed
+               pruned1 = case branch_collapse_thresh of 
+                          Nothing  -> pruned0
+                          Just thr -> collapseBranchLenThresh thr pruned0
+               numL   = numLeaves pruned1
                
            -- TEMPTOGGLE
 	   -- when False $ do putStrLn$ "DRAWING TREE"
@@ -149,7 +157,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 		    return (0, [], Just (numL, treename))
 	    else do 
 	     when verbose$ putStr "."
-	     return$ (numL, [FullTree treename lblAcc pruned], Nothing)
+	     return$ (numL, [FullTree treename lblAcc pruned1], Nothing)
 
     results <- mapM do_one fulltrees
     let (counts::[Int], validtreess, pairs:: [Maybe (Int, String)]) = unzip3 results

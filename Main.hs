@@ -6,30 +6,26 @@
 
 module Main where
 import           Data.List (sort, intersperse, foldl')
+import           Data.List.Split (splitOneOf)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Control.Monad
-import           Control.Concurrent    (Chan, readChan, ThreadId, forkIO)
+import           Control.Concurrent    (readChan)
 import           System.Environment    (getArgs, withArgs)
 import           System.Console.GetOpt (OptDescr(Option), ArgDescr(..), ArgOrder(..), usageInfo, getOpt)
 import           System.Exit           (exitSuccess)
 import           System.IO             (stdout) 
-import           Test.HUnit            (runTestTT, Test, test, (~:))
 
-import           Control.Applicative ((<$>))
 import           Control.Exception (catch, SomeException)
 import qualified Data.Vector                 as V
 import           Test.HUnit                  as HU
 
-import Data.GraphViz (runGraphvizCanvas,GraphvizCommand(Dot),GraphvizCanvas(Xlib))
-import Text.PrettyPrint.HughesPJClass hiding (char, Style)
-
 import Bio.Phylogeny.PhyBin.CoreTypes 
-import Bio.Phylogeny.PhyBin           (driver, binthem, normalize, annotateWLabLists,
+import Bio.Phylogeny.PhyBin           (driver, normalize, annotateWLabLists,
                                        unitTests, acquireTreeFiles, deAnnotate,
                                        retrieveHighlights, matchAnyHighlight)
-import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewicks, parseNewickFiles, unitTests)
+import Bio.Phylogeny.PhyBin.Parser    (parseNewick, parseNewickFiles, unitTests)
 import Bio.Phylogeny.PhyBin.Visualize (viewNewickTree) -- dotNewickTree_debug
 import Bio.Phylogeny.PhyBin.RFDistance 
 import Bio.Phylogeny.PhyBin.PreProcessor
@@ -49,7 +45,9 @@ data Flag
     | Version 
     | Output String
     | SetNumTaxa Int
-    | BranchThresh Double      
+    | BranchThresh Double
+    | BootStrapThresh Int
+    | PruneTaxa [String]      
     | NullOpt
     | Graph | Draw
     | Force 
@@ -59,7 +57,7 @@ data Flag
     | Highlight FilePath
     | ShowTreesInDendro | ShowInterior
 
-    | HashRF Bool
+    | RFMode WhichRFMode
     | SelfTest
     | RFMatrix | LineSetDiffMode
     | PrintNorms | PrintReg | PrintConsensus | PrintMatching
@@ -74,7 +72,9 @@ data Flag
 
   deriving (Show, Eq, Ord) -- ORD is really used.
 
-
+data WhichRFMode = HashRF | TolerantNaive  
+  deriving (Show, Eq, Ord)
+           
 parseTabDelim :: String -> Flag
 parseTabDelim _str = 
   TabDelimited 8 9
@@ -106,9 +106,9 @@ options =
 --     , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
 
      , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
-     , Option []    ["simple"] (NoArg$ HashRF False)
-       ((if hashRF then "" else "(default) ")++ "use direct all-to-all comparison")
-     , Option []    ["hashrf"] (NoArg$ HashRF True)
+     , Option []    ["tolerant"] (NoArg$ RFMode TolerantNaive)
+       ((if hashRF then "" else "(default) ")++ "use a slower, modified RF metric that tolerates missing taxa")
+     , Option []    ["hashrf"]   (NoArg$ RFMode HashRF)
        ((if hashRF then "(default) " else "")++"use a variant of the HashRF algorithm for the distance matrix")
        
      , Option []        []          (NoArg NullOpt)  ""
@@ -123,16 +123,24 @@ options =
      , Option [] ["highlight"] (ReqArg Highlight "FILE") $ 
            "Highlight nodes in the tree-of-trees (dendrogram) consistent with the.\n"++
            "given tree file.  Multiple highlights are permitted and use different colors."
+--         "Highlights may be SUBTREES that use any subset of the taxa."
      , Option [] ["interior"] (NoArg ShowInterior)
           "Show the consensus trees for interior nodes in the dendogram, rather than just points."
            
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "---------------------------- Tree pre-processing -----------------------------"
 
-     , Option ['n']     ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM") "expect NUM taxa for this dataset"
+     , Option ['n']     ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM")
+                                     "expect NUM taxa for this dataset, demand trees have all of them"
 
-     , Option ['b']     ["branchcut"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
-              
+     , Option ['b'] ["minbranchlen"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
+
+     , Option []    ["minbootstrap"] (ReqArg (BootStrapThresh . read) "INT")
+                                     "collapse branches with bootstrap values less than INT"
+     , Option []    ["prune"]        (ReqArg (PruneTaxa . parseTaxa) "TAXA")
+                                     ("Prune trees to only TAXA, implies --numtaxa\n"++
+                                      "Space and comma separated lists are allowed.")
+       
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Extracting taxa names ----------------------------"
 --     , Option ['n']     ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM") "expect NUM taxa for this dataset (otherwise it will guess)"
@@ -172,6 +180,11 @@ options =
      ]
  where
    hashRF = use_hashrf default_phybin_config
+
+-- | Parse the list of taxa provided on the command line.
+parseTaxa :: String -> [String]
+parseTaxa str = filter (not . null) $
+                splitOneOf ",; " str                
 
 usage :: String
 usage = "\nUsage: phybin [OPTION...] files or directories...\n\n"++
@@ -251,15 +264,21 @@ main =
            PrintMatching  -> return cfg
            
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
-           HashRF  bl  -> return cfg { use_hashrf = bl }
+           RFMode TolerantNaive
+             | Expected _ <- num_taxa cfg -> error "should not set --numtaxa AND --tolerant"
+             | otherwise  -> return cfg { use_hashrf = False }
+           RFMode HashRF  -> return cfg { use_hashrf = True }
            BinningMode -> return cfg { clust_mode = BinThem }
            EditDistThresh n -> return cfg { dist_thresh = Just n }
            DendogramOnly    -> return cfg { dist_thresh = Nothing }
      
 	   Output s -> return cfg { output_dir= s }
 
-	   SetNumTaxa n -> return cfg { num_taxa= Expected n }
-     	   BranchThresh n -> return cfg { branch_collapse_thresh= Just n }
+	   SetNumTaxa n
+             | not (use_hashrf cfg) -> error "should not set --tolerant AND --numtaxa"
+             | otherwise -> return cfg { num_taxa= Expected n }
+     	   BranchThresh    n -> return cfg { branch_collapse_thresh    = Just n }
+     	   BootStrapThresh n -> return cfg { bootstrap_collapse_thresh = Just n }
 	   Graph     -> return cfg { do_graph= True } 
 	   Draw	     -> return cfg { do_draw = True } 
 	   View      -> return cfg -- Handled below
@@ -425,7 +444,7 @@ testNorm str = do
 -- 112 and 13
 rftest :: IO ()
 rftest = do 
-  (mp,[t1,t2]) <- parseNewickFiles (take 2) ["tests/13.tr", "tests/112.tr"]
+  (_mp,[t1,t2]) <- parseNewickFiles (take 2) ["tests/13.tr", "tests/112.tr"]
   putStrLn$ "Tree 13           : " ++ show (displayDefaultTree t1)
   putStrLn$ "Tree 112          : "++ show (displayDefaultTree t2)
 
