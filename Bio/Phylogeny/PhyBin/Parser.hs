@@ -23,11 +23,16 @@ type NameHack = (String->String)
 -- | Parse a bytestring into a NewickTree with branch lengths.  The
 --   first argument is file from which the data came and is just for
 --   better error messages.
+-- 
+-- If the single bytestring contains more than one tree, then a number is appended to
+-- the tree names.
 parseNewick :: LabelTable -> NameHack -> String -> B.ByteString -> (LabelTable, [NewickTree DefDecor])
-parseNewick tbl0 name_hack file input =
-  extractLabelTable tbl0 $ 
-  runB file (many1$ newick_parser name_hack) $
-  B.filter (not . isSpace) input
+parseNewick tbl0 name_hack file input = (lbls,trs)
+  where 
+  (lbls,trs) = 
+     extractLabelTable tbl0 $ 
+     runB file (many1$ newick_parser name_hack) $
+     B.filter (not . isSpace) input
 
 -- treeFiles <- acquireTreeFiles files
                      -- let fn f = do raw <- B.readFile f
@@ -52,8 +57,17 @@ parseNewickFiles fn nms = do
 parseNewicks :: NameHack -> [(String,B.ByteString)] -> (LabelTable, [FullTree DefDecor])
 parseNewicks name_hack pairs = (labtbl, fullTrs)
  where
-   fullTrs = [ FullTree (takeBaseName file) labtbl tr
-             | (file,tr) <- trs ]
+   fullTrs = [ FullTree (tweakName file ind) labtbl tr
+             | (file,tr) <- trs
+             | ind <- [(0::Int)..] ]
+   tweakName file ind = -- Here we do the renaming/numbering business:
+     if addSuffix
+     then (takeBaseName file)++"_"++show ind 
+     else (takeBaseName file) 
+   addSuffix = case trs of
+                 []  -> False -- Should this be an error?
+                 [_] -> False
+                 _   -> True
    (labtbl, trs) = P.foldr fn (M.empty,[]) pairs
    fn (file,bstr) (!acc,!ls) =
      let (acc',trs) = parseNewick acc name_hack file bstr

@@ -21,6 +21,7 @@ import           Data.Time.Clock
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
+import qualified Data.Text.Lazy.IO           as T
 import qualified Data.Vector                 as V
 import qualified Data.Vector.Unboxed         as U
 import           Control.Monad       (forM, forM_, filterM, when, unless)
@@ -218,12 +219,12 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                 putStrLn$ " [async] writing dendrogram as a graph to dendrogram.dot"
                 -- writeFile (combine output_dir "dendrogram.dot") 
                 --           (show $ renderDot $ Gv.toDot dot)
-                mdotfile <- safePrintDendro dot
-                case mdotfile of
+                mtxt <- safePrintDendro dot
+                case mtxt of
                   Nothing  -> 
                     putStrLn "WARNING: because we couldn't print it, we're not drawing the dendrogram either."
-                  Just str -> do
-                    writeFile (combine output_dir "dendrogram.pdf") str                  
+                  Just txt -> do
+                    T.writeFile (combine output_dir "dendrogram.dot") txt
                     putStrLn$ " [async] next to plot dendrogram.pdf"
                     _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
                     t1 <- getCurrentTime          

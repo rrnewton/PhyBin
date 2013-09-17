@@ -23,7 +23,6 @@ import qualified Data.GraphViz        as Gv hiding (parse, toLabel)
 import qualified Data.GraphViz.Attributes.Complete as GA
 import qualified Data.GraphViz.Attributes.Colors   as GC
 import           Data.GraphViz.Attributes.Colors   (Color(RGB))
-import           Data.GraphViz.Printing (renderDot)
 
 -- import           Test.HUnit          ((~:),(~=?),Test,test)
 

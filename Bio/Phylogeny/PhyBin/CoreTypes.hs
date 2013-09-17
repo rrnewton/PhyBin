@@ -131,10 +131,7 @@ displayStrippedTree orig = loop tr <> ";"
 -- Labels
 ----------------------------------------------------------------------------------------------------
 
-
--- Experimental: toggle this to change the representation of labels:
--- Alas I always have problems with the interned string libs (e.g. segfaults)... [2012.11.20]
-----------------------------------------
+-- | Labels are inexpensive unique integers.  The table is necessary for converting them back.
 type Label = Int
 
 -- | Map labels back onto meaningful names.

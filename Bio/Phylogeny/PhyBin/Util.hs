@@ -20,6 +20,7 @@ import           Data.List           (delete, minimumBy, sortBy, insertBy, inter
 import           Data.Maybe          (fromMaybe, catMaybes)
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
+import qualified Data.Text.Lazy             as T
 import           Control.Monad       (forM, forM_, filterM, when, unless)
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
@@ -43,6 +44,7 @@ import           Bio.Phylogeny.PhyBin.RFDistance
 import qualified Data.Clustering.Hierarchical as C
 import qualified Data.Graph.Inductive as G
 import qualified Data.GraphViz        as Gv
+import           Data.GraphViz.Printing (renderDot)
 import  Data.GraphViz.Types.Canonical (nodeStmts, graphStatements)
 
 ----------------------------------------------------------------------------------------------------
@@ -114,16 +116,15 @@ acquireTreeFiles inputs = do
 
 --------------------------------------------------------------------------------
 
--- Detect cycles:
--- safePrintDendro :: C.Dendrogram (FullTree a) -> IO (Maybe String)
-safePrintDendro :: Gv.DotGraph G.Node -> IO (Maybe String)
+-- | Step carefully in case of cycles (argh).
+safePrintDendro :: Gv.DotGraph G.Node -> IO (Maybe T.Text)
 safePrintDendro dotg= do 
 --  putStrLn$ "Dendrogram graph size: "++ show (F.foldl' (\a _ -> a+1) 0 dotg)
   mx <- timeout (2 * 1000 * 1000) $ do
 --        putStrLn$ "Dendrogram graph, is directed?: "++ show (Gv.directedGraph dotg)
         putStrLn$ "Dendrogram graph size: "++ show (length $ nodeStmts $ graphStatements dotg)
-        let str = show dotg
-        evaluate (length str)
+        let str = renderDot $ Gv.toDot dotg
+        evaluate (T.length str)
         return str
   case mx of
     Nothing -> do putStrLn "WARNING: DotGraph appears to be a cyclic structure.  This is probably a bug."
@@ -137,4 +138,3 @@ sanityCheck dendro = do
                   | otherwise = S.insert (treename elm) seen
       sz = S.size $ F.foldl' fn S.empty dendro
   putStrLn$ "Sanity checked dendrogram of size: "++show sz
-
