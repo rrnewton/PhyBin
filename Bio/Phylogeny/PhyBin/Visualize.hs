@@ -25,6 +25,8 @@ import qualified Data.GraphViz.Attributes.Colors   as GC
 import           Data.GraphViz.Attributes.Colors   (Color(RGB))
 -- import           Test.HUnit          ((~:),(~=?),Test,test)
 
+import           System.Timeout (timeout)
+
 import qualified Data.Clustering.Hierarchical as C
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
@@ -235,11 +237,17 @@ truncateNames dendro = (prefChars, fmap chopName dendro)
 --   The channel retuned will carry a single message to signal
 --   completion of the subprocess.
 viewNewickTree :: String -> FullTree StandardDecor -> IO (Chan (), FullTree StandardDecor)
+-- TODO: UPDATE THIS TO RETURN AN ASYNC!!
 viewNewickTree title tree@(FullTree{nwtree}) =
   do chan <- newChan
      let dot = dotNewickTree title (1.0 / avg_branchlen [nwtree])
 	                     tree
-	 runit = do Gv.runGraphvizCanvas default_cmd dot Gv.Xlib
+	 runit = do mx <- -- timeout defaultTimeout $
+                          -- This one is interactive, so we don't need a timeout.
+                          Gv.runGraphvizCanvas default_cmd dot Gv.Xlib
+                    -- case mx of
+                    --   Nothing -> putStrLn$ "WARNING: call to graphviz TIMED OUT."++file
+                    --   _       -> return ()
 		    writeChan chan ()
      --str <- prettyPrint d
      --putStrLn$ "Generating the following graphviz tree:\n " ++ str
@@ -262,9 +270,21 @@ myShowFloat fl =
   then show rnd
   else printf "%.4f" fl
 
-dotToPDF :: Gv.DotGraph G.Node -> FilePath -> IO FilePath
+-- | Convert a .dot file to .pdf.
+dotToPDF :: Gv.DotGraph G.Node -> FilePath -> IO (Maybe FilePath)
 dotToPDF dot file = do
-  Gv.runGraphvizCommand default_cmd dot Gv.Pdf file
+  -- Very, very, annoyingly, the current Hackage graphviz library hangs indefinitely
+  -- rather than erroring if Graphviz is not installed (Mac OS).
+  x <- timeout defaultTimeout $ 
+       Gv.runGraphvizCommand default_cmd dot Gv.Pdf file
+  case x of
+    Nothing -> do putStrLn$ "WARNING: call to graphviz TIMED OUT.  File not plotted: "++file
+                  return Nothing
+    _       -> return x
+
+-- Arbitrary: 15 second timeout.
+defaultTimeout :: Int
+defaultTimeout = (15 * 1000 * 1000)
 
 -- | Convert a NewickTree to a graphviz Dot graph representation.
 dotNewickTree :: String -> Double -> FullTree StandardDecor -> Gv.DotGraph G.Node

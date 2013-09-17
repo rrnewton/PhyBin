@@ -212,7 +212,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                 let dot = dotDendrogram cfg "dendrogram" 1.0 dendro mnameMap highlightTrs
                 _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
                 t1 <- getCurrentTime          
-                putStrLn$ " [finished] Wrote dendrogram diagram to file dendrogram.pdf ("
+                putStrLn$ " [finished] Writing dendrogram diagram ("
                           ++show(diffUTCTime t1 t0)++")")
               else async (return ())
         case dist_thresh of
@@ -268,7 +268,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 
     -- Wait on parallel tasks:
     putStrLn$ "Waiting for "++show (length$ async2:asyncs)++" asynchronous tasks to finish..."
---    mapM_ wait (async2:asyncs)
+    mapM_ wait (async2:asyncs)
     putStrLn$ "Finished."
     --------------------------------------------------------------------------------
     -- End driver
