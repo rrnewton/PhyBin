@@ -137,9 +137,9 @@ options =
 
      , Option []    ["minbootstrap"] (ReqArg (BootStrapThresh . read) "INT")
                                      "collapse branches with bootstrap values less than INT"
-     , Option []    ["prune"]        (ReqArg (PruneTaxa . parseTaxa) "TAXA")
-                                     ("Prune trees to only TAXA, implies --numtaxa\n"++
-                                      "Space and comma separated lists are allowed.")
+     -- , Option []    ["prune"]        (ReqArg (PruneTaxa . parseTaxa) "TAXA")
+     --                                 ("Prune trees to only TAXA, implies --numtaxa\n"++
+     --                                  "Space and comma separated lists are allowed.")
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Extracting taxa names ----------------------------"
@@ -301,7 +301,9 @@ main =
      when (null files) $ do
 	defaultErr ["No file arguments!\n"]
 
-     ------------------------------------------------------------
+     --------------------------------------------------------------------
+     ----- Handle SPECIAL modes before going into normal processing -----
+     --------------------------------------------------------------------
      -- This mode kicks in AFTER config options are processed.
      when (elem PrintReg opts) $ do 
        (_,fts) <- parseNewickFiles (name_hack config) all_inputs

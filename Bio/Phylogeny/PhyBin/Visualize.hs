@@ -263,7 +263,7 @@ myShowFloat fl =
   else printf "%.4f" fl
 
 dotToPDF :: Gv.DotGraph G.Node -> FilePath -> IO FilePath
-dotToPDF dot file =
+dotToPDF dot file = do
   Gv.runGraphvizCommand default_cmd dot Gv.Pdf file
 
 -- | Convert a NewickTree to a graphviz Dot graph representation.

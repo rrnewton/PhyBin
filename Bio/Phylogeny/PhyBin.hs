@@ -117,10 +117,19 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
           
     highlightTrs <- retrieveHighlights name_hack labelTab highlights
-        
-    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++
-	      (unwords$ M.elems labelTab)
---	      show (nest 2 $ sep $ map text $ M.elems labelTab)    
+
+    let allTaxaLs = M.elems labelTab
+        totalTaxa = length allTaxaLs
+    putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++ (unwords allTaxaLs)
+
+    expected_num_taxa <-
+      case num_taxa of
+        Expected n | n == totalTaxa -> return n
+                   | otherwise -> do putStrLn$ " !  Warning, was told to expect "++show n++
+                                               " taxa, but there are "++show totalTaxa++" present in the dataset!"
+                                     return n 
+        _ -> do putStrLn$ "Note: --numtaxa not supplied, defaulting to expecting all "++show totalTaxa++" to be present..."
+                return totalTaxa
     --------------------------------------------------------------------------------
 
     case bootstrap_collapse_thresh of
@@ -150,14 +159,13 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 	   --      	   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
            --                       show (map get_weight$ get_children normal)
 
-           if Expected numL /= num_taxa
+           if numL /= expected_num_taxa
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
 					    ++ show numL ++"): "++ treename
 		    return (0, [], Just (numL, treename))
-	    else do 
-	     when verbose$ putStr "."
-	     return$ (numL, [FullTree treename lblAcc pruned1], Nothing)
+	    else do when verbose$ putStr "."
+                    return$ (numL, [FullTree treename lblAcc pruned1], Nothing)
 
     results <- mapM do_one fulltrees
     let (counts::[Int], validtreess, pairs:: [Maybe (Int, String)]) = unzip3 results
@@ -187,7 +195,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                                           M.toList x
                             return (x,binlist,[])
       ClusterThem{linkage} -> do
-        (mat, dendro) <- doCluster use_hashrf num_taxa linkage validtrees        
+        (mat, dendro) <- doCluster use_hashrf expected_num_taxa linkage validtrees        
         when print_rfmatrix $ printDistMat stdout mat
         hnd <- openFile  (combine output_dir ("distance_matrix.txt")) WriteMode
         printDistMat hnd mat
@@ -198,7 +206,8 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
         putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
         let plotIt mnameMap = 
               if True -- do_graph
-              then async (do 
+              then async (do
+                putStrLn$ " [async] creating task to plot dendrogram.pdf"
                 t0 <- getCurrentTime
                 let dot = dotDendrogram cfg "dendrogram" 1.0 dendro mnameMap highlightTrs
                 _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
@@ -255,11 +264,11 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 
     async2 <- case clust_mode of
                 BinThem       -> outputBins binlist output_dir do_graph
-                ClusterThem{} -> outputClusters num_taxa binlist output_dir do_graph
+                ClusterThem{} -> outputClusters expected_num_taxa binlist output_dir do_graph
 
     -- Wait on parallel tasks:
-    putStrLn$ "Waiting for asynchronous tasks to finish..."
-    mapM_ wait (async2:asyncs)
+    putStrLn$ "Waiting for "++show (length$ async2:asyncs)++" asynchronous tasks to finish..."
+--    mapM_ wait (async2:asyncs)
     putStrLn$ "Finished."
     --------------------------------------------------------------------------------
     -- End driver
@@ -280,16 +289,14 @@ doBins validtrees = do
 	          binthem validtrees
     return (classes)
 
-doCluster :: Bool -> NumTaxa -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
-doCluster use_hashrf num_taxa linkage validtrees = do
+doCluster :: Bool -> Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
+doCluster use_hashrf expected_num_taxa linkage validtrees = do
   t0 <- getCurrentTime
   when use_hashrf$ putStrLn " Using HashRF-style algorithm..."
   let nwtrees  = map nwtree validtrees
       numtrees = length validtrees
       mat = if use_hashrf 
-            then case num_taxa of
-                  Expected n -> hashRF n nwtrees
-                  _          -> error "--hashrf option requires that expected number of taxa be specified"
+            then hashRF expected_num_taxa nwtrees 
             else fst (naiveDistMatrix nwtrees)
       ixtrees  = zip [0..] validtrees
       dist (i,t1) (j,t2) | j == i     = 0
@@ -364,8 +371,8 @@ sliceDendro dstThresh den = loop den
 --------------------------------------------------------------------------------
 
 -- outputClusters :: (Num a1, Ord a1, Show a1) => Int -> [(a1, t, OneCluster a)] -> String -> Bool -> IO ()
-outputClusters :: NumTaxa -> [(Int, OneCluster a)] -> String -> Bool -> IO (Async ())
-outputClusters (Expected num_taxa) binlist output_dir do_graph = do
+outputClusters :: Int -> [(Int, OneCluster a)] -> String -> Bool -> IO (Async ())
+outputClusters num_taxa binlist output_dir do_graph = do
     let numbins = length binlist
     let base i size = combine output_dir (filePrefix ++ show i ++"_"++ show size) 
     let consTrs = [ FullTree "consensus" (labelTable $ head ftrees) nwtr 
@@ -393,9 +400,8 @@ outputClusters (Expected num_taxa) binlist output_dir do_graph = do
       async $ do
         mapM_ wait asyncs
         putStrLn$ " [finished] Wrote visual representations of consensus trees to "++filePrefix++"<N>_<size>.pdf"
-     else async (return ())
-
-outputClusters num_taxa _ _ _  = error "outputClusters: cannot produce a consensus tree when num_taxa is unknown or variable."
+     else do putStrLn$ "NOT creating processes to build per-cluster visualizations. (Not asked to.)"
+             async (return ())
 
 outputBins :: [(Int, OneCluster StandardDecor)] -> String -> Bool -> IO (Async ())
 outputBins binlist output_dir  do_graph = do

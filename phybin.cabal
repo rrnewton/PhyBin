@@ -108,7 +108,7 @@ Executable phybin
                      vector >= 0.10,
                      hierarchical-clustering >= 0.4, split >= 0.2
 --                     lattice-par, 
-  GHC-Options: -O2 -funbox-strict-fields -rtsopts
+  GHC-Options: -O2 -funbox-strict-fields -rtsopts -threaded
 
   if flag(hashrf)
      CPP-Options: -DUSE_HASHRF
