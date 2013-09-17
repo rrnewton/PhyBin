@@ -277,14 +277,8 @@ myShowFloat fl =
 -- | Convert a .dot file to .pdf.
 dotToPDF :: Gv.DotGraph G.Node -> FilePath -> IO (Maybe FilePath)
 dotToPDF dot file = do
-
-  -- putStrLn "ATTEMPTING TO RENDER: "
-  -- print$ dot
-  -- putStrLn "IN .DOT FORMAT:"
-  -- print$ renderDot $ Gv.toDot dot
-  
-  -- Very, very, annoyingly, the current Hackage graphviz library hangs indefinitely
-  -- rather than erroring if Graphviz is not installed (Mac OS).
+  -- If we have any problem with graphviz we want to time that out rather than let
+  -- our whole run hang:
   x <- timeout defaultTimeout $ 
        Gv.runGraphvizCommand default_cmd dot Gv.Pdf file
   case x of

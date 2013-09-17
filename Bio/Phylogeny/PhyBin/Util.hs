@@ -9,7 +9,8 @@
 
 module Bio.Phylogeny.PhyBin.Util
        ( 
-         is_regular_file, acquireTreeFiles, safePrintDendro
+         is_regular_file, acquireTreeFiles,
+         safePrintDendro, sanityCheck
        )
        where
 
@@ -119,7 +120,7 @@ safePrintDendro :: Gv.DotGraph G.Node -> IO (Maybe String)
 safePrintDendro dotg= do 
 --  putStrLn$ "Dendrogram graph size: "++ show (F.foldl' (\a _ -> a+1) 0 dotg)
   mx <- timeout (2 * 1000 * 1000) $ do
-        putStrLn$ "Dendrogram graph, is directed?: "++ show (Gv.directedGraph dotg)
+--        putStrLn$ "Dendrogram graph, is directed?: "++ show (Gv.directedGraph dotg)
         putStrLn$ "Dendrogram graph size: "++ show (length $ nodeStmts $ graphStatements dotg)
         let str = show dotg
         evaluate (length str)
@@ -128,4 +129,12 @@ safePrintDendro dotg= do
     Nothing -> do putStrLn "WARNING: DotGraph appears to be a cyclic structure.  This is probably a bug."
                   return Nothing
     _ -> return mx
+
+sanityCheck :: C.Dendrogram (FullTree DefDecor) -> IO ()
+sanityCheck dendro = do 
+  let fn seen elm | S.member (treename elm) seen =
+                       error$"Dendrogram failed sanity check!  Tree name occurs multiple times: "++(treename elm)
+                  | otherwise = S.insert (treename elm) seen
+      sz = S.size $ F.foldl' fn S.empty dendro
+  putStrLn$ "Sanity checked dendrogram of size: "++show sz
 

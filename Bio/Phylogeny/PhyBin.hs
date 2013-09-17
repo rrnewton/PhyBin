@@ -31,7 +31,7 @@ import           Control.Concurrent  (Chan)
 import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist, createDirectoryIfMissing,
                                       getDirectoryContents, getCurrentDirectory)
-import           System.IO           (openFile, hClose, IOMode(..), stdout)
+import           System.IO           (openFile, hClose, IOMode(..), stdout, withFile)
 import           System.Info         (os)
 import           System.Process      (system)
 import           System.Exit         (ExitCode(..))
@@ -198,15 +198,17 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                                           M.toList x
                             return (x,binlist,[])
       ClusterThem{linkage} -> do
-        (mat, dendro) <- doCluster use_hashrf expected_num_taxa linkage validtrees        
+        (mat, dendro) <- doCluster use_hashrf expected_num_taxa linkage validtrees
+        -------------------- 
         when print_rfmatrix $ printDistMat stdout mat
-        hnd <- openFile  (combine output_dir ("distance_matrix.txt")) WriteMode
-        printDistMat hnd mat
-        hClose hnd
+        withFile (combine output_dir ("distance_matrix.txt")) WriteMode $ \ hnd ->
+           printDistMat hnd mat
         --------------------
         writeFile (combine output_dir ("dendrogram.txt"))
                   (show$ fmap treename dendro)
         putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
+        sanityCheck dendro
+        --------------------
         let plotIt mnameMap = 
               if True -- do_graph
               then async (do
