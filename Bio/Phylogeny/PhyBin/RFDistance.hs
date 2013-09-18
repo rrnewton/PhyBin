@@ -40,6 +40,7 @@ import           System.IO.Unsafe
 -- import           Data.LVar.NatArray as NA
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
+import           Bio.Phylogeny.PhyBin.PreProcessor (pruneTreeLeaves)
 -- import           Data.BitList
 import qualified Data.Set as S
 import qualified Data.List as L
@@ -158,18 +159,47 @@ type DistanceMatrix = V.Vector (U.Vector Int)
 --
 --   This uses a naive method, directly computing the pairwise
 --   distance between each pair of trees.
+--
+--   This method is TOLERANT of differences in the laba/taxa sets between two trees.
+--   It simply prunes to the intersection before doing the distance comparison.
+--   Other scoring methods may be added in the future.  (For example, penalizing for
+--   missing taxa.)
 naiveDistMatrix :: [NewickTree a] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
 naiveDistMatrix lst = 
    let sz = P.length lst
-       eachbips = V.fromList $ map allBips lst
+       treeVect  = V.fromList lst
+       labelSets = V.map treeLabels treeVect
+       eachbips  = V.map allBips    treeVect
        mat = V.generate sz $ \ i ->        
              U.generate i  $ \ j ->
-             let trI = (eachbips V.! i)
-                 trJ = (eachbips V.! j)
-                 diff1 = S.size (S.difference trI trJ)
-                 diff2 = S.size (S.difference trJ trI)
-             in diff1 + diff2
+             let 
+                 inI = (labelSets V.! i)
+                 inJ = (labelSets V.! j)
+                 inBoth = S.intersection inI inJ
+
+                 -- Match will always succeed due to size==0 test below:
+                 Just prI = pruneTreeLeaves inBoth (treeVect V.! i)
+                 Just prJ = pruneTreeLeaves inBoth (treeVect V.! j)
+                   
+                 -- Memoization: If we are using it at its full size we can use the cached one:
+                 bipsI = if S.size inBoth == S.size inI
+                         then (eachbips V.! i)
+                         else allBips prI
+                 bipsJ = if S.size inBoth == S.size inJ
+                         then (eachbips V.! j)
+                         else allBips prJ
+
+                 diff1 = S.size (S.difference bipsI bipsJ)
+                 diff2 = S.size (S.difference bipsJ bipsI) -- symettric difference
+             in if S.size inBoth == 0
+                then 0 -- This is weird, but what other answer could we give?
+                else diff1 + diff2
    in (mat, eachbips)
+
+ where
+   treeLabels :: NewickTree a -> S.Set Label
+   treeLabels (NTLeaf _ lab)  = S.singleton lab
+   treeLabels (NTInterior _ ls) = S.unions (map treeLabels ls)
 
 -- | The number of bipartitions implied by a tree is one per EDGE in the tree.  Thus
 -- each interior node carries a list of BiPs the same length as its list of children.

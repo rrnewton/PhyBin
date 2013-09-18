@@ -5,11 +5,31 @@
 
 module Bio.Phylogeny.PhyBin.PreProcessor
        ( collapseBranches,
-         collapseBranchLenThresh, collapseBranchBootStrapThresh
+         collapseBranchLenThresh, collapseBranchBootStrapThresh,
+         pruneTreeLeaves
        )
        where
 
+import qualified Data.Set as S
+import Data.Maybe (catMaybes)
 import  Bio.Phylogeny.PhyBin.CoreTypes 
+
+
+-- | Prune the leaves of the tree to only those leaves in the provided set.
+-- 
+--   If ALL leaves are pruned from the set, this function returns nothing.
+pruneTreeLeaves :: S.Set Label -> NewickTree a -> Maybe (NewickTree a)
+pruneTreeLeaves set tr = loop tr
+ where
+   loop orig@(NTLeaf _ lab)
+     | S.member lab set = Just orig
+     | otherwise        = Nothing
+   loop (NTInterior dec ls) =
+     case catMaybes $ map loop ls of
+       []    -> Nothing
+       [one] -> Just one
+       ls'   -> Just (NTInterior dec ls')
+
 
 -- | Removes branches that do not meet a predicate, leaving a shallower, "bushier"
 --   tree.  This does NOT change the set of leaves (taxa), it only removes interior
@@ -69,3 +89,6 @@ collapseBranchBootStrapThresh thr tr =
     getBoot (Just boot,_)  = boot
     -- This had better happen BEFORE branch-length based collapsing is done:
     collapser (_,len1) (_,len2)  = (Nothing, len1+len2)
+
+
+

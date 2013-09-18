@@ -132,7 +132,8 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                    | otherwise -> do putStrLn$ " !  Warning, was told to expect "++show n++
                                                " taxa, but there are "++show totalTaxa++" present in the dataset!"
                                      return n 
-        _ -> do putStrLn$ "Note: --numtaxa not supplied, defaulting to expecting all "++show totalTaxa++" to be present..."
+        _ -> do when use_hashrf $
+                  putStrLn$ "Note: --numtaxa not supplied, defaulting to expecting all "++show totalTaxa++" to be present..."
                 return totalTaxa
     --------------------------------------------------------------------------------
 
@@ -225,7 +226,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                     putStrLn "WARNING: because we couldn't print it, we're not drawing the dendrogram either."
                   Just txt -> do
                     T.writeFile (combine output_dir "dendrogram.dot") txt
-                    putStrLn$ " [async] next to plot dendrogram.pdf"
+                    putStrLn$ " [async] Next, plot dendrogram.pdf"
                     _ <- dotToPDF dot (combine output_dir "dendrogram.pdf") 
                     t1 <- getCurrentTime          
                     putStrLn$ " [finished] Writing dendrogram diagram ("
@@ -285,7 +286,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     -- Wait on parallel tasks:
     putStrLn$ "Waiting for "++show (length$ async2:asyncs)++" asynchronous tasks to finish..."
     mapM_ wait (async2:asyncs)
-    putStrLn$ "Finished."
+    putStrLn$ "Phybin completed."
     --------------------------------------------------------------------------------
     -- End driver
     --------------------------------------------------------------------------------

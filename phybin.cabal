@@ -117,3 +117,32 @@ Executable phybin
      Build-Depends:  bitvec >= 0.1
   if flag(sequential)
      CPP-Options: -DSEQUENTIALIZE
+
+
+-- DUPLICATED from executable:
+Test-Suite test-phybin
+  Main-is:           TestAll.hs
+  Type:              exitcode-stdio-1.0
+--  Build-Depends:     phybin
+  Build-Depends:     base >= 3 && < 5, directory, process, containers, 
+                     async, time,
+                     filepath, 
+                     graphviz >= 2999.16, 
+                     text >= 0.11 && < 0.12,
+                     prettyclass, fgl,
+                     HUnit, bytestring, 
+                     parsec >= 3.1.0, 
+                     vector >= 0.10,
+                     hierarchical-clustering >= 0.4, split >= 0.2
+  -- Additional depends for test:
+  Build-Depends:  HUnit, test-framework, test-framework-hunit, test-framework-th
+  GHC-Options: -O2 -funbox-strict-fields -rtsopts -threaded
+
+  if flag(hashrf)
+     CPP-Options: -DUSE_HASHRF
+  if flag(bitvec)
+     CPP-Options: -DBITVEC_BIPS
+     Build-Depends:  bitvec >= 0.1
+  if flag(sequential)
+     CPP-Options: -DSEQUENTIALIZE
+

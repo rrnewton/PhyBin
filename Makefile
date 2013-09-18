@@ -5,17 +5,23 @@ default: haskell
 
 all: find_tree_matches.exe haskell
 
-GHC=ghc-7.4.2
-
-haskell:
-	$(GHC) -O2 --make Main.hs -o phybin.exe
-	strip phybin.exe
-
-win:
-	$(GHC) -DWIN32 --make Bio/Phylogeny/PhyBin/Main.hs -o phybin.exe
+# GHC=ghc-7.4.2
+GHC=ghc-7.6.3
 
 release: haskell
 	upx phybin.exe
+	du -h phybin.exe
+
+haskell:
+	cabal configure
+	cabal build
+	cp ./dist/build/phybin/phybin phybin.exe
+	du -h phybin.exe
+	strip phybin.exe
+	du -h phybin.exe
+
+win:
+	$(GHC) -DWIN32 --make Main.hs -o phybin.exe
 
 find_tree_matches.exe: find_tree_matches.ss
 	mzc --exe find_tree_matches.exe find_tree_matches.ss

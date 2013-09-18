@@ -37,9 +37,8 @@ import           Test.HUnit          ((~:),(~=?),Test,test)
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Bio.Phylogeny.PhyBin.CoreTypes
-import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
-import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
-import           Bio.Phylogeny.PhyBin.RFDistance
+-- import           Bio.Phylogeny.PhyBin.Parser (parseNewick)
+-- import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree)
 
 import qualified Data.Clustering.Hierarchical as C
 import qualified Data.Graph.Inductive as G
