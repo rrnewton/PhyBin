@@ -18,6 +18,7 @@ import           Data.List           (delete, minimumBy, sortBy, foldl1', foldl'
 import           Data.Maybe          (fromMaybe, catMaybes)
 import           Data.Either         (partitionEithers)
 import           Data.Time.Clock
+import           Data.Tuple          (swap)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Map                   as M
 import qualified Data.Set                   as S
@@ -45,7 +46,8 @@ import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           Data.GraphViz.Printing (renderDot)
 import           Bio.Phylogeny.PhyBin.CoreTypes
 import           Bio.Phylogeny.PhyBin.Parser (parseNewick, parseNewicks)
-import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranchLenThresh, collapseBranchBootStrapThresh)
+import           Bio.Phylogeny.PhyBin.PreProcessor (collapseBranchLenThresh,
+                                                    collapseBranchBootStrapThresh, pruneTreeLeaves)
 import           Bio.Phylogeny.PhyBin.Visualize (dotToPDF, dotNewickTree, viewNewickTree, dotDendrogram)
 import           Bio.Phylogeny.PhyBin.RFDistance
 import           Bio.Phylogeny.PhyBin.Binning
@@ -120,7 +122,8 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let num_files = length goodFiles
     bstrs <- mapM B.readFile goodFiles
     let (labelTab, fulltrees) = parseNewicks name_hack (zip files bstrs)
-          
+        nameToLabel = M.fromList $ map swap $ M.toList labelTab
+        
     highlightTrs <- retrieveHighlights name_hack labelTab highlights
 
     let allTaxaLs = M.elems labelTab
@@ -157,10 +160,13 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                           Nothing  -> pruned1
                           Just thr -> collapseBranchLenThresh thr pruned1
                pruned3 = case preprune_labels of
-                          Nothing -> pruned2
-                          Just lst -> error "FINISH ME -- implement --prune"
+                          Nothing  -> Just pruned2
+                          Just lst -> pruneTreeLeaves (S.fromList (map lkup lst)) pruned2
 
-               numL    = numLeaves pruned3
+               lkup trnm =
+                 case M.lookup trnm nameToLabel of
+                   Nothing -> error$ "Tree name "++show trnm++" did not occur ANYWHERE in the input set."
+                   Just lab -> lab
     
            -- TEMPTOGGLE
 	   -- when False $ do putStrLn$ "DRAWING TREE"
@@ -169,12 +175,14 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 	   --      	   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
            --                       show (map get_weight$ get_children normal)
            when verbose$ putStr "."
-           let looksOK   = return (numL, [FullTree treename lblAcc pruned1], Nothing)
-               discardIt = return (0, [], Just (numL, treename))
-           case numL of
-             0 -> do when verbose$ putStrLn$ "\n WARNING: tree empty after preprocessing, discarding: "++ treename
-                     discardIt
-             _ -> case rfmode of
+           case pruned3 of
+             Nothing -> do when verbose$ putStrLn$ "\n WARNING: tree empty after preprocessing, discarding: "++ treename
+                           return (0, [], Just (0, treename)) 
+             Just pruned3' ->
+               let numL   = numLeaves pruned3'
+                   looksOK   = return (numL, [FullTree treename lblAcc pruned3'], Nothing)
+                   discardIt = return (0, [], Just (numL, treename)) 
+               in case rfmode of
                    TolerantNaive -> looksOK
                    HashRF | numL == expected_num_taxa -> looksOK
                           | otherwise -> do
@@ -187,8 +195,12 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let (counts::[Int], validtreess, pairs:: [Maybe (Int, String)]) = unzip3 results
     let validtrees = concat validtreess
         warnings2  = catMaybes pairs
-        
+    
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
+    mapM_ (print . displayStrippedTree) validtrees
+    case preprune_labels of
+      Nothing  -> return ()
+      Just lst -> putStrLn$ "PRUNING trees to just these taxa: "++show lst
     when (length warnings2 > 0) $
       putStrLn$ "Number of bad/unreadable input tree files: " ++ show (length warnings2)
     putStrLn$ "Number of VALID trees (correct # of leaves/taxa): " ++ show (length validtrees)
