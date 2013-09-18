@@ -32,8 +32,8 @@ import Bio.Phylogeny.PhyBin.PreProcessor
 
 import qualified Data.Clustering.Hierarchical as C
 
-
-import Version
+import Data.Version (showVersion)
+import Paths_phybin (version)
 
 ----------------------------------------------------------------------------------------------------
 -- MAIN script: Read command line options and call the program.
@@ -233,7 +233,7 @@ main =
      let process_opt cfg opt = case opt of 
 	   NullOpt -> return cfg
 	   Verbose -> return cfg { verbose= True } 
-	   Version -> do putStrLn$ "phybin version "++phybin_version; exitSuccess
+	   Version -> do putStrLn$ "phybin version "++ showVersion version; exitSuccess
 
 	   SelfTest -> do _ <- runTestTT allUnitTests; exitSuccess
 

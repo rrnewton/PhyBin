@@ -70,7 +70,7 @@ Library
                      Bio.Phylogeny.PhyBin.RFDistance  
                      Bio.Phylogeny.PhyBin.Util
                      Bio.Phylogeny.PhyBin.Visualize
---  Other-modules:     Data.BitList
+  -- Data.BitList
   Build-Depends:     base >= 3 && < 5, directory, process, containers, 
                      async, time,
                      filepath, 
