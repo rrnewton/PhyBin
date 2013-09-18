@@ -21,7 +21,8 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          avg_branchlen, get_bootstraps,
 
          -- * Command line config options
-         PhyBinConfig(..), default_phybin_config, 
+         PhyBinConfig(..), default_phybin_config,
+         WhichRFMode(..),
 
          -- * General helpers
          Label, LabelTable,
@@ -32,6 +33,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        where
 
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Foldable (Foldable(..))
 import Data.Maybe (maybeToList)
 import Data.Monoid (mappend, mconcat)
@@ -218,13 +220,18 @@ data PhyBinConfig =
       , highlights  :: [FilePath] -- [FullTree ()]
       , show_trees_in_dendro :: Bool
       , show_interior_consensus :: Bool
-      , use_hashrf  :: Bool  
+      , rfmode :: WhichRFMode
+      , preprune_labels :: Maybe [String]
       , print_rfmatrix :: Bool
       , dist_thresh :: Maybe Int
       , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
       , bootstrap_collapse_thresh :: Maybe Int
         -- ^ BootStrap values less than this result in the intermediate node being collapsed.        
       }
+
+-- | Supported modes for computing RFDistance.
+data WhichRFMode = HashRF | TolerantNaive  
+  deriving (Show, Eq, Ord)
 
 -- | How many taxa should we expect in the incoming dataset?
 data NumTaxa = Expected Int  -- ^ Supplied by the user.  Committed.
@@ -246,11 +253,8 @@ default_phybin_config =
       , do_draw = False
 --      , clust_mode = BinThem
       , clust_mode = ClusterThem C.UPGMA
-#ifdef USE_HASHRF
-      , use_hashrf = True
-#else
-      , use_hashrf = False
-#endif
+      , rfmode = HashRF
+      , preprune_labels = Nothing
       , highlights     = []
       , show_trees_in_dendro = False
       , show_interior_consensus = False

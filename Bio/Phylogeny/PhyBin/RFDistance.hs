@@ -164,7 +164,7 @@ type DistanceMatrix = V.Vector (U.Vector Int)
 --   It simply prunes to the intersection before doing the distance comparison.
 --   Other scoring methods may be added in the future.  (For example, penalizing for
 --   missing taxa.)
-naiveDistMatrix :: [NewickTree a] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
+naiveDistMatrix :: [NewickTree DefDecor] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
 naiveDistMatrix lst = 
    let sz = P.length lst
        treeVect  = V.fromList lst

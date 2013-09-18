@@ -18,16 +18,17 @@ import  Bio.Phylogeny.PhyBin.CoreTypes
 -- | Prune the leaves of the tree to only those leaves in the provided set.
 -- 
 --   If ALL leaves are pruned from the set, this function returns nothing.
-pruneTreeLeaves :: S.Set Label -> NewickTree a -> Maybe (NewickTree a)
+pruneTreeLeaves :: S.Set Label -> NewickTree DefDecor -> Maybe (NewickTree DefDecor)
 pruneTreeLeaves set tr = loop tr
  where
    loop orig@(NTLeaf _ lab)
      | S.member lab set = Just orig
      | otherwise        = Nothing
-   loop (NTInterior dec ls) =
+   loop (NTInterior dec@(_,blen) ls) =
      case catMaybes $ map loop ls of
        []    -> Nothing
-       [one] -> Just one
+       -- Here we ELIMINATE the intermediate node, but we add in its branch length:
+       [one] -> Just$ fmap (\(bs,bl) -> (bs,blen + bl)) one
        ls'   -> Just (NTInterior dec ls')
 
 

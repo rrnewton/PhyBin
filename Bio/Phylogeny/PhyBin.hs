@@ -80,7 +80,7 @@ data DendroPlus a = DPLeaf (FullTree a)
 driver :: PhyBinConfig -> IO ()
 driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                 do_graph, branch_collapse_thresh, bootstrap_collapse_thresh, highlights, 
-                dist_thresh, clust_mode, use_hashrf, print_rfmatrix } =
+                dist_thresh, clust_mode, rfmode, print_rfmatrix } =
    -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
@@ -132,7 +132,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                    | otherwise -> do putStrLn$ " !  Warning, was told to expect "++show n++
                                                " taxa, but there are "++show totalTaxa++" present in the dataset!"
                                      return n 
-        _ -> do when use_hashrf $
+        _ -> do when (rfmode /= TolerantNaive) $
                   putStrLn$ "Note: --numtaxa not supplied, defaulting to expecting all "++show totalTaxa++" to be present..."
                 return totalTaxa
     --------------------------------------------------------------------------------
@@ -165,7 +165,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
            --                       show (map get_weight$ get_children normal)
 
            -- In TOLERANT mode we don't bother with this check:
-           if numL /= expected_num_taxa && use_hashrf
+           if numL /= expected_num_taxa && rfmode /= TolerantNaive
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
 					    ++ show numL ++"): "++ treename
@@ -201,7 +201,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                                           M.toList x
                             return (x,binlist,[])
       ClusterThem{linkage} -> do
-        (mat, dendro) <- doCluster use_hashrf expected_num_taxa linkage validtrees
+        (mat, dendro) <- doCluster (rfmode==HashRF) expected_num_taxa linkage validtrees
         -------------------- 
         when print_rfmatrix $ printDistMat stdout mat
         withFile (combine output_dir ("distance_matrix.txt")) WriteMode $ \ hnd ->
@@ -307,7 +307,7 @@ doBins validtrees = do
 	          binthem validtrees
     return (classes)
 
-doCluster :: Bool -> Int -> C.Linkage -> [FullTree a] -> IO (DistanceMatrix, C.Dendrogram (FullTree a))
+doCluster :: Bool -> Int -> C.Linkage -> [FullTree DefDecor] -> IO (DistanceMatrix, C.Dendrogram (FullTree DefDecor))
 doCluster use_hashrf expected_num_taxa linkage validtrees = do
   t0 <- getCurrentTime
   when use_hashrf$ putStrLn " Using HashRF-style algorithm..."

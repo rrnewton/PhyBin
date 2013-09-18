@@ -71,9 +71,6 @@ data Flag
     | NameTable String  -- Must come after Cutoff/Prefix
 
   deriving (Show, Eq, Ord) -- ORD is really used.
-
-data WhichRFMode = HashRF | TolerantNaive  
-  deriving (Show, Eq, Ord)
            
 parseTabDelim :: String -> Flag
 parseTabDelim _str = 
@@ -106,10 +103,10 @@ options =
 --     , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
 
      , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
-     , Option []    ["tolerant"] (NoArg$ RFMode TolerantNaive)
-       ((if hashRF then "" else "(default) ")++ "use a slower, modified RF metric that tolerates missing taxa")
      , Option []    ["hashrf"]   (NoArg$ RFMode HashRF)
-       ((if hashRF then "(default) " else "")++"use a variant of the HashRF algorithm for the distance matrix")
+                   "(default) use a variant of the HashRF algorithm for the distance matrix"       
+     , Option []    ["tolerant"] (NoArg$ RFMode TolerantNaive)
+                    "use a slower, modified RF metric that tolerates missing taxa"
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "----------------------------- Visualization --------------------------------"
@@ -137,9 +134,9 @@ options =
 
      , Option []    ["minbootstrap"] (ReqArg (BootStrapThresh . read) "INT")
                                      "collapse branches with bootstrap values less than INT"
-     -- , Option []    ["prune"]        (ReqArg (PruneTaxa . parseTaxa) "TAXA")
-     --                                 ("Prune trees to only TAXA, implies --numtaxa\n"++
-     --                                  "Space and comma separated lists are allowed.")
+     , Option []    ["prune"]        (ReqArg (PruneTaxa . parseTaxa) "TAXA")
+                                     ("Prune trees to only TAXA, implicitly sets --numtaxa.\n"++
+                                      "Space and comma separated lists of taxa are allowed.  Use quotes.")
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Extracting taxa names ----------------------------"
@@ -178,8 +175,7 @@ options =
      , Option [] ["consensus"]  (NoArg PrintConsensus) "print a strict consensus tree for the inputs, then exit"
      , Option [] ["matching"] (NoArg PrintMatching) "print a list of tree names that match any --highlight argument"
      ]
- where
-   hashRF = use_hashrf default_phybin_config
+ 
 
 -- | Parse the list of taxa provided on the command line.
 parseTaxa :: String -> [String]
@@ -266,8 +262,8 @@ main =
            Cluster lnk -> return cfg { clust_mode = ClusterThem lnk }
            RFMode TolerantNaive
              | Expected _ <- num_taxa cfg -> error "should not set --numtaxa AND --tolerant"
-             | otherwise  -> return cfg { use_hashrf = False }
-           RFMode HashRF  -> return cfg { use_hashrf = True }
+             | otherwise  -> return cfg { rfmode = TolerantNaive }
+           RFMode HashRF  -> return cfg { rfmode = HashRF }
            BinningMode -> return cfg { clust_mode = BinThem }
            EditDistThresh n -> return cfg { dist_thresh = Just n }
            DendogramOnly    -> return cfg { dist_thresh = Nothing }
@@ -275,10 +271,13 @@ main =
 	   Output s -> return cfg { output_dir= s }
 
 	   SetNumTaxa n
-             | not (use_hashrf cfg) -> error "should not set --tolerant AND --numtaxa"
+             | rfmode cfg == TolerantNaive -> error "should not set --tolerant AND --numtaxa"
              | otherwise -> return cfg { num_taxa= Expected n }
      	   BranchThresh    n -> return cfg { branch_collapse_thresh    = Just n }
      	   BootStrapThresh n -> return cfg { bootstrap_collapse_thresh = Just n }
+
+     	   PruneTaxa ls -> return cfg { preprune_labels = Just ls }
+     
 	   Graph     -> return cfg { do_graph= True } 
 	   Draw	     -> return cfg { do_draw = True } 
 	   View      -> return cfg -- Handled below

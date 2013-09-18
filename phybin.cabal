@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.2.11
+Version:        0.3
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -21,6 +21,7 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 -- 0.2.9 -- Add command line opt --interior
 -- 0.2.10 -- Add command line opt --matching
 -- 0.2.11 -- Cleanup and windows compatibility.
+-- 0.3    -- significant improvements and new functionality.
 
 -- homepage: http://code.haskell.org/phybin
 -- homepage: http://people.csail.mit.edu/newton/phybin/
