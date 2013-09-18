@@ -164,7 +164,8 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
 	   --      	   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
            --                       show (map get_weight$ get_children normal)
 
-           if numL /= expected_num_taxa
+           -- In TOLERANT mode we don't bother with this check:
+           if numL /= expected_num_taxa && use_hashrf
 	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
  		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
 					    ++ show numL ++"): "++ treename
