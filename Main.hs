@@ -102,7 +102,8 @@ options =
                                   "Irrespective of whether this is activated, a hierarchical clustering (dendogram.pdf) is produced."  
 --     , Option []    ["dendogram"] (NoArg DendogramOnly)$ "Report a hierarchical clustering (default)"
 
-     , Option []        []     (NoArg$ error "internal problem")  "  Select Robinson-Foulds (symmetric difference) distance algorithm:"
+     , Option []        []          (NoArg NullOpt)  ""
+     , Option []        []     (NoArg$ error "internal problem")  "--- Select Robinson-Foulds (symmetric difference) distance algorithm: ---"
      , Option []    ["hashrf"]   (NoArg$ RFMode HashRF)
                    "(default) use a variant of the HashRF algorithm for the distance matrix"       
      , Option []    ["tolerant"] (NoArg$ RFMode TolerantNaive)

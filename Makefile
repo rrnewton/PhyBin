@@ -37,6 +37,9 @@ launch: doc distro push upload
 doc:
 	pandoc -s -S --toc -c website.css README.md -o website/index.html
 
+release_website:
+	cp website/* ~/.hyplan/projects/phybin/
+
 distro:
 	cabal sdist
 	cp -v dist/*.tar.gz website/
