@@ -126,17 +126,15 @@ options =
            
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "---------------------------- Tree pre-processing -----------------------------"
-
-     , Option ['n']     ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM")
-                                     "expect NUM taxa for this dataset, demand trees have all of them"
-
+     , Option []    ["prune"]  (ReqArg (PruneTaxa . parseTaxa) "TAXA")
+                               ("Prune trees to only TAXA before doing anything else.\n"++
+                                "Space and comma separated lists of taxa are allowed.  Use quotes.")
      , Option ['b'] ["minbranchlen"] (ReqArg (BranchThresh . read) "LEN") "collapse branches less than LEN"
 
      , Option []    ["minbootstrap"] (ReqArg (BootStrapThresh . read) "INT")
                                      "collapse branches with bootstrap values less than INT"
-     , Option []    ["prune"]        (ReqArg (PruneTaxa . parseTaxa) "TAXA")
-                                     ("Prune trees to only TAXA, implicitly sets --numtaxa.\n"++
-                                      "Space and comma separated lists of taxa are allowed.  Use quotes.")
+     -- , Option ['n'] ["numtaxa"] (ReqArg (SetNumTaxa . read) "NUM")
+     --                            "expect NUM taxa for this dataset, demand trees have all of them"
        
      , Option []        []          (NoArg NullOpt)  ""
      , Option []        []  (NoArg$ error "internal problem")  "--------------------------- Extracting taxa names ----------------------------"

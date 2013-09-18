@@ -80,7 +80,8 @@ data DendroPlus a = DPLeaf (FullTree a)
 driver :: PhyBinConfig -> IO ()
 driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                 do_graph, branch_collapse_thresh, bootstrap_collapse_thresh, highlights, 
-                dist_thresh, clust_mode, rfmode, print_rfmatrix } =
+                dist_thresh, clust_mode, rfmode, preprune_labels, 
+                print_rfmatrix } =
    -- Unused: do_draw
  do 
     --------------------------------------------------------------------------------
@@ -127,14 +128,12 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     putStrLn$ "\nTotal unique taxa ("++ show (M.size labelTab) ++"):\n  "++ (unwords allTaxaLs)
 
     expected_num_taxa <-
-      case num_taxa of
-        Expected n | n == totalTaxa -> return n
-                   | otherwise -> do putStrLn$ " !  Warning, was told to expect "++show n++
-                                               " taxa, but there are "++show totalTaxa++" present in the dataset!"
-                                     return n 
-        _ -> do when (rfmode /= TolerantNaive) $
-                  putStrLn$ "Note: --numtaxa not supplied, defaulting to expecting all "++show totalTaxa++" to be present..."
-                return totalTaxa
+      case preprune_labels of
+        Nothing -> return totalTaxa
+        Just ls -> return (length ls)
+    case rfmode of
+      TolerantNaive -> return ()
+      HashRF -> putStrLn$ "Note: defaulting to expecting ALL "++show expected_num_taxa++" to be present.."
     --------------------------------------------------------------------------------
 
     case bootstrap_collapse_thresh of
@@ -148,31 +147,42 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
     let do_one :: FullTree DefDecor -> IO (Int, [FullTree DefDecor], Maybe (Int, String))
         do_one (FullTree treename lblAcc parsed) = do 
            let
-               -- Important: MUST collapse bootstrap first if we're doing both:
-               pruned0 = case bootstrap_collapse_thresh of
-                          Nothing  -> parsed
-                          Just thr -> collapseBranchBootStrapThresh thr parsed
-               pruned1 = case branch_collapse_thresh of 
-                          Nothing  -> pruned0
-                          Just thr -> collapseBranchLenThresh thr pruned0
-               numL   = numLeaves pruned1
+               pruned0 = parsed
                
+               -- Important: MUST collapse bootstrap first if we're doing both:
+               pruned1 = case bootstrap_collapse_thresh of
+                          Nothing  -> pruned0
+                          Just thr -> collapseBranchBootStrapThresh thr pruned0
+               pruned2 = case branch_collapse_thresh of 
+                          Nothing  -> pruned1
+                          Just thr -> collapseBranchLenThresh thr pruned1
+               pruned3 = case preprune_labels of
+                          Nothing -> pruned2
+                          Just lst -> error "FINISH ME -- implement --prune"
+
+               numL    = numLeaves pruned3
+    
            -- TEMPTOGGLE
 	   -- when False $ do putStrLn$ "DRAWING TREE"
            --                 viewNewickTree "Annotated"  (FullTree file lblAcc' annot)
            --                 viewNewickTree "Normalized" (FullTree file lblAcc' normal)
 	   --      	   putStrLn$ "WEIGHTS OF NORMALIZED' CHILDREN: "++
            --                       show (map get_weight$ get_children normal)
-
-           -- In TOLERANT mode we don't bother with this check:
-           if numL /= expected_num_taxa && rfmode /= TolerantNaive
-	    then do --putStrLn$ "\n WARNING: file contained an empty or single-node tree: "++ show file
- 		    when verbose$ putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
-					    ++ show numL ++"): "++ treename
-		    return (0, [], Just (numL, treename))
-	    else do when verbose$ putStr "."
-                    return$ (numL, [FullTree treename lblAcc pruned1], Nothing)
-
+           when verbose$ putStr "."
+           let looksOK   = return (numL, [FullTree treename lblAcc pruned1], Nothing)
+               discardIt = return (0, [], Just (numL, treename))
+           case numL of
+             0 -> do when verbose$ putStrLn$ "\n WARNING: tree empty after preprocessing, discarding: "++ treename
+                     discardIt
+             _ -> case rfmode of
+                   TolerantNaive -> looksOK
+                   HashRF | numL == expected_num_taxa -> looksOK
+                          | otherwise -> do
+                             when verbose$
+                               putStrLn$ "\n WARNING: tree contained unexpected number of leaves ("
+                                         ++ show numL ++"): "++ treename
+                             discardIt
+                             
     results <- mapM do_one fulltrees
     let (counts::[Int], validtreess, pairs:: [Maybe (Int, String)]) = unzip3 results
     let validtrees = concat validtreess
