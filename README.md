@@ -63,9 +63,9 @@ installed you can install phybin with this one-liner:
 Otherwise PhyBin is also available for download as a statically-linked
 executable for Mac-OS, Linux, and Windows:
 
-  * [Download Mac-OS Binary](phybin-0.2.11.mac) 
-  * [Download Linux Binary](phybin-0.2.11.x86_64_linux)
-  * [Download Windows Binary](phybin-0.2.11_windows.exe)
+  * [Download Mac-OS Binary](phybin-0.3.mac) 
+  * [Download Linux Binary](phybin-0.3.x86_64_linux)
+  * [Download Windows Binary](phybin-0.3_windows.exe)
   
 
 

@@ -197,7 +197,7 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
         warnings2  = catMaybes pairs
     
     putStrLn$ "\nNumber of input tree files: " ++ show num_files
-    -- mapM_ (print . displayStrippedTree) validtrees -- Debugging.
+    mapM_ (print . displayStrippedTree) validtrees -- Debugging.
     case preprune_labels of
       Nothing  -> return ()
       Just lst -> putStrLn$ "PRUNING trees to just these taxa: "++show lst
