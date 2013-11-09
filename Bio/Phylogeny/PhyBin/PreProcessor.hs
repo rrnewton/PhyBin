@@ -12,15 +12,22 @@ module Bio.Phylogeny.PhyBin.PreProcessor
 
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
-import  Bio.Phylogeny.PhyBin.CoreTypes 
-
+import Bio.Phylogeny.PhyBin.CoreTypes
+import Debug.Trace
+import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 -- | Prune the leaves of the tree to only those leaves in the provided set.
 -- 
 --   If ALL leaves are pruned from the set, this function returns nothing.
 pruneTreeLeaves :: S.Set Label -> NewickTree DefDecor -> Maybe (NewickTree DefDecor)
-pruneTreeLeaves set tr = loop tr
+pruneTreeLeaves set tr =
+  -- res
+  case res of
+--    Just x -> trace ("PRUNED: "++show (displayStrippedTree x)) x
+    Just x -> trace ("PRUNED: "++ show(pPrint x)) x    
+    Nothing -> Nothing
  where
+   res = loop tr
    loop orig@(NTLeaf _ lab)
      | S.member lab set = Just orig
      | otherwise        = Nothing

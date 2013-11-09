@@ -16,6 +16,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
          treeSize, numLeaves, liftFT,
          get_dec, set_dec, get_children, 
          map_labels, all_labels, foldIsomorphicTrees,
+--         makeDummyFullTree, 
 
          -- * Utilities specific to StandardDecor:
          avg_branchlen, get_bootstraps,
@@ -190,6 +191,14 @@ data FullTree a =
            , nwtree     :: NewickTree a 
            }
  deriving (Show, Ord, Eq)
+
+-- | For debugging purposes it is often useful to be able to substitute a NewickTree
+-- for a FullTree.
+makeDummyFullTree :: NewickTree a -> FullTree a
+makeDummyFullTree ntr =
+   FullTree "dummyTree" labs ntr
+  where
+    labs = undefined
 
 liftFT :: (NewickTree t -> NewickTree a) -> FullTree t -> FullTree a
 liftFT fn (FullTree nm labs x) = FullTree nm labs (fn x)
