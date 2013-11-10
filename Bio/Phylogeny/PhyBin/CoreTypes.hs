@@ -32,6 +32,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        )
        where
 
+import Control.DeepSeq   (NFData(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Foldable (Foldable(..))
@@ -62,6 +63,10 @@ data NewickTree a =
  | NTInterior a  [NewickTree a]
  deriving (Show, Eq, Ord)
 
+instance NFData a => NFData (NewickTree a) where
+  rnf (NTLeaf a _) = rnf a
+  rnf (NTInterior nd ls) = rnf nd `seq` rnf ls
+  
 -- TODO: Ordering maybe shouldn't need to touch the metadata.  At least on the fast
 -- path.
 
@@ -69,10 +74,6 @@ data NewickTree a =
 -- [2010.09.22] Disabling:
 instance NFData Atom where
   rnf a = rnf (fromAtom a :: Int)
-
-instance NFData a => NFData (NewickTree a) where
-  rnf (NTLeaf l n)      = rnf (l,n)
-  rnf (NTInterior l ls) = rnf (l,ls)
 -}
 
 instance Functor NewickTree where 
@@ -190,6 +191,14 @@ data FullTree a =
            , nwtree     :: NewickTree a 
            }
  deriving (Show, Ord, Eq)
+
+instance NFData a => NFData (FullTree a) where
+  rnf FullTree{treename,labelTable, nwtree} =
+    rnf treename `seq`
+    rnf labelTable `seq`
+    rnf nwtree
+
+-- instance NFData a => NFData (NewickTree a) where
 
 liftFT :: (NewickTree t -> NewickTree a) -> FullTree t -> FullTree a
 liftFT fn (FullTree nm labs x) = FullTree nm labs (fn x)

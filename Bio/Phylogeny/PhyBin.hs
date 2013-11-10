@@ -27,6 +27,7 @@ import qualified Data.Vector                 as V
 import qualified Data.Vector.Unboxed         as U
 import           Control.Monad       (forM, forM_, filterM, when, unless)
 import qualified Control.Concurrent.Async as Async
+import           Control.DeepSeq     (deepseq, NFData(..))
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
@@ -224,13 +225,22 @@ driver cfg@PBC{ verbose, num_taxa, name_hack, output_dir, inputs=files,
                             return (x,binlist,[])
       ClusterThem{linkage} -> do
         (mat, dendro) <- doCluster (rfmode==HashRF) expected_num_taxa linkage validtrees
+
+
         -------------------- 
         when print_rfmatrix $ printDistMat stdout mat
         withFile (combine output_dir ("distance_matrix.txt")) WriteMode $ \ hnd ->
            printDistMat hnd mat
         --------------------
+
+
+        t2 <- getCurrentTime
+        -- evaluate (deepseq dendro)
         writeFile (combine output_dir ("dendrogram.txt"))
                   (show$ fmap treename dendro)
+        t3 <- getCurrentTime
+        putStrLn$ "Time for clustering was: "++show (diffUTCTime t3 t2)
+      
         putStrLn " [finished] Wrote full dendrogram to file dendrogram.txt"
         sanityCheck dendro
         --------------------
@@ -349,9 +359,12 @@ doCluster use_hashrf expected_num_taxa linkage validtrees = do
   V.mapM_ evaluate mat
   t1 <- getCurrentTime
   putStrLn$ "Time to compute distance matrix: "++show(diffUTCTime t1 t0)
-  putStrLn$ "Clustering using method "++show linkage
+  putStrLn$ "Next, clustering using method "++show linkage
   return (mat,dendro)
 
+instance NFData a => NFData (C.Dendrogram a) where
+  rnf (C.Leaf a) = rnf a
+  rnf (C.Branch _ d1 d2) = rnf d1 `seq` rnf d2
 
 reportClusts :: ClustMode -> [(Int, OneCluster StandardDecor)] -> IO ()
 reportClusts mode binlist = do 

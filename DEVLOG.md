@@ -138,3 +138,15 @@ In fact... even if I use phybin to prune out the 503 trees with 10
 taxa, I still get the error.
 
 
+[2013.11.09] {Coming back to timing it}
+----------------------------------------
+
+I'm running it like this:
+ 
+   ./dist/build/phybin/phybin --complete rfexamples/150-taxa-1000-trees.tre  +RTS -K100M -s 
+
+With one thread I see 11.6 seconds in RF dist computation and 3 seconds in clustering.
+
+Productivity sucks... 60% even on one thread.  Maybe it's because of the IO?
+
+
