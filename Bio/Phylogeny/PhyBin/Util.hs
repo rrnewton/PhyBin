@@ -29,10 +29,10 @@ import           System.Directory    (doesFileExist, doesDirectoryExist,
                                       getDirectoryContents, getCurrentDirectory)
 import           System.IO           (openFile, hClose, IOMode(ReadMode), stderr,
                                       hPutStr, hPutStrLn)
-import           System.Process      (system)
+import           System.Process      (system, readProcess)
 import           System.Exit         (ExitCode(..))
 import           Test.HUnit          ((~:),(~=?),Test,test)
-import qualified HSH 
+-- import qualified HSH 
 
 -- For vizualization:
 import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
@@ -92,7 +92,11 @@ acquireTreeFiles inputs = do
       -- [2010.09.23] This is no longer really necessary:
       if not exists then do 
 	 hPutStr stderr$ "Input not a file/directory, assuming wildcard, using 'find' for expansion"
-	 entries <- HSH.run$ "find " ++ path	 
+--	 entries <- HSH.run$ "find " ++ path	 
+         -- Removing last dependency on HSH [2014.02.08]
+         output <- readProcess ("find "++path) [] ""
+         let entries = lines output
+
 	 hPutStrLn stderr$ "("++show (length entries)++" files found):  "++ show path
 	 return entries
        else do
