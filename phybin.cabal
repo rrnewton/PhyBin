@@ -79,7 +79,7 @@ Library
                      parsec >= 3.1.0, 
                      bitvec >= 0.1, vector >= 0.10,
                      hierarchical-clustering >= 0.4, split >= 0.2,
-                     lattice-par, transformers, bits-atomic, monad-par, monad-par-extras
+                     lvish >= 2.0, transformers, bits-atomic, monad-par, monad-par-extras
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
 
   if flag(hashrf)
@@ -104,7 +104,7 @@ Executable phybin-par
                      parsec >= 3.1.0, 
                      bitvec >= 0.1, vector >= 0.10,
                      hierarchical-clustering >= 0.4, split >= 0.2,
-                     lattice-par, transformers, bits-atomic, monad-par, monad-par-extras
+                     lvish >= 2.0, transformers, bits-atomic, monad-par, monad-par-extras
   GHC-Options: -O2 -funbox-strict-fields -rtsopts -threaded
 
   if flag(hashrf)
