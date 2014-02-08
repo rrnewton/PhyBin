@@ -211,3 +211,10 @@ first phase fo the algorithm twice!  So, as expected the results are not good ye
  * 1 thread: 4.22s
  * 4 thread: 1.65
 
+
+[2014.01.16] {Measure memory footprint}
+
+This says that max resident is 31.5MB:
+
+    /usr/bin/time -v ./hashrf.rhel ./related_work/hashrf/30.hashrf-6.0.0-dist-seed-option/examples/150-taxa-1000-trees.tre 1000 -o /tmp/foo
+
