@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Bio.Phylogeny.PhyBin.RFDistance
        (
@@ -52,6 +53,7 @@ import qualified Control.Monad.Par.IO as PIO
 import qualified Control.Monad.Par.Combinator as PC
 
 import           Control.LVish hiding (for_)
+import           Control.LVish.DeepFrz (runParThenFreezeIO, Frzn)
 #if 0
 import qualified Data.LVar.Set   as IS
 import           Data.LVar.Map   as IM
@@ -269,35 +271,46 @@ type DistanceMatrix2 = V.Vector (SV.Vector Int)
 hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix2
 hashRF num_taxa trees = do
     t0 <- getCurrentTime
-    IMapSnap bigtable <- getBigtable
+    bigtable <- getBigtable
     t1 <- getCurrentTime
+
+    error "FINISHME" {-
+
     res <- PIO.runParIO $ ingest bigtable
     t2 <- getCurrentTime
     putStrLn$ "hashRF: time spent in first/second runPar and total: "
               ++show (diffUTCTime t1 t0, diffUTCTime t2 t1, diffUTCTime t2 t0)
     return res
-  where
-    getBigtable :: IO (Snapshot (IMap DenseLabelSet) (Snapshot IS.ISet Int))
-    getBigtable = runParThenFreezeIO par
+-}
 
-    par :: forall d s . Par d s (IMap DenseLabelSet s (IS.ISet s Int))
+
+  where
+
+    getBigtable :: IO (IMap DenseLabelSet Frzn (IS.ISet Frzn Int))
+    getBigtable = runParThenFreezeIO $ isQD par
+
+    par :: forall e s . (HasPut e) => 
+           Par e s (IMap DenseLabelSet s (IS.ISet s Int))
     par =  do themp <- newEmptyMap
 --              build themp (zip [0..] trees)
               let domain = V.fromList (zip [0..] trees)
-              parForTiled 16 (0,V.length domain) $ \ ix ->
+              parForTiled Nothing 16 (0,V.length domain) $ \ ix ->
                 build themp (domain V.! ix)
-
               return themp
+
     num_trees = length trees
     -- First build the table:
-    build :: IMap DenseLabelSet s (IS.ISet s Int) -> (Int,NewickTree dec) -> Par d s ()
+    build :: (HasPut e) => 
+             IMap DenseLabelSet s (IS.ISet s Int) -> (Int,NewickTree dec) -> Par e s ()
     build acc (ix,hd) = do
       let bips = allBips hd 
-          fn bip = IM.modify acc bip (IS.putInSet ix)
+          fn bip = IM.gmodify acc bip (IS.insert ix)
       F.traverse_ fn bips
 
     -- Second, ingest the table to construct the distance matrix:
-    ingest :: IM.Map DenseLabelSet (Snapshot IS.ISet Int) -> PIO.ParIO DistanceMatrix2
+    ingest :: IM.IMap DenseLabelSet Frzn (IS.ISet Frzn Int) -> PIO.ParIO DistanceMatrix2
+    ingest = undefined {-
+
     ingest bipTable = theST
       where
        theST = do 
@@ -348,6 +361,9 @@ hashRF num_taxa trees = do
         liftIO$ do
           v1 <- V.unsafeFreeze matr
           T.traverse (SV.unsafeFreeze) v1
+
+
+-}
 
 -- TEMPORARY:
 --------------------------------------------------------------------------------
