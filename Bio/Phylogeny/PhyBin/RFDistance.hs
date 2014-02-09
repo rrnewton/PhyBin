@@ -273,19 +273,13 @@ hashRF num_taxa trees = do
     t0 <- getCurrentTime
     bigtable <- getBigtable
     t1 <- getCurrentTime
-
-    error "FINISHME" {-
-
     res <- PIO.runParIO $ ingest bigtable
     t2 <- getCurrentTime
     putStrLn$ "hashRF: time spent in first/second runPar and total: "
               ++show (diffUTCTime t1 t0, diffUTCTime t2 t1, diffUTCTime t2 t0)
     return res
--}
-
 
   where
-
     getBigtable :: IO (IMap DenseLabelSet Frzn (IS.ISet Frzn Int))
     getBigtable = runParThenFreezeIO $ isQD par
 
@@ -309,8 +303,6 @@ hashRF num_taxa trees = do
 
     -- Second, ingest the table to construct the distance matrix:
     ingest :: IM.IMap DenseLabelSet Frzn (IS.ISet Frzn Int) -> PIO.ParIO DistanceMatrix2
-    ingest = undefined {-
-
     ingest bipTable = theST
       where
        theST = do 
@@ -334,7 +326,8 @@ hashRF num_taxa trees = do
                           incrStorable row j
 #endif                          
                           return ()
-            fn (IS.ISetSnap bipMembs) =
+            fn :: S.Set Int -> IO ()
+            fn bipMembs =
               -- Here we quadratically consider all pairs of trees and ask whether
               -- their edit distance is increased based on this particular BiP.
               -- Actually, as an optimization, it is sufficient to consider only the
@@ -349,21 +342,25 @@ hashRF num_taxa trees = do
 --                 trace ("Computed donthave "++ show dontHave) $ 
                  traverseDense_2 fn1 haveIt
 --        parForTiled 16 (0,M.size bipTable) $ \ix -> do
-{-
+
+#if 0
+        -- TODO: Need a proper parallell fold over the SLMap...
         PC.parFor (PC.InclusiveRange 0 (IM.size bipTable - 1)) $ \ix -> do
           -- liftIO$ F.traverse_ fn bipTable
-          liftIO$ fn (snd$ M.elemAt ix bipTable)
--}
--- TODO: Restore parallelism:
-        let fn2 () _k x = liftIO$ fn x
-        IM.foldWithKeyM fn2 () bipTable
+          liftIO$ fn $ IS.fromISet (snd$ M.elemAt ix bipTable)
+#else
+-- TODO: Restore parallelism ^^:
+--        let fn2 () x = (liftIO (fn x)) :: PIO.ParIO () 
+--        IM.foldWithKeyM fn2 () bipTable
+        liftIO$ F.traverse_ (fn . IS.fromISet) bipTable
+#endif
 
         liftIO$ do
           v1 <- V.unsafeFreeze matr
           T.traverse (SV.unsafeFreeze) v1
 
 
--}
+
 
 -- TEMPORARY:
 --------------------------------------------------------------------------------
