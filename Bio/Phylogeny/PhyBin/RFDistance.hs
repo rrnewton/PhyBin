@@ -49,8 +49,7 @@ import           Text.PrettyPrint.HughesPJClass hiding (char, Style)
 import           System.IO      (hPutStrLn, hPutStr, Handle)
 import           System.IO.Unsafe
 
-import qualified Control.Monad.Par.IO as PIO
-import qualified Control.Monad.Par.Combinator as PC
+-- import qualified Control.Monad.Par.Combinator as PC
 
 import           Control.LVish hiding (for_)
 import           Control.LVish.DeepFrz (runParThenFreezeIO, Frzn)
@@ -270,11 +269,11 @@ type DistanceMatrix2 = V.Vector (SV.Vector Int)
 -- produce (non-localized) increments to a distance matrix.
 hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix2
 hashRF num_taxa trees = do
-    t0 <- getCurrentTime
+    t0  <- getCurrentTime
     bigtable <- getBigtable
-    t1 <- getCurrentTime
-    res <- PIO.runParIO $ ingest bigtable
-    t2 <- getCurrentTime
+    t1  <- getCurrentTime
+    res <- runParNonDet $ ingest bigtable
+    t2  <- getCurrentTime
     putStrLn$ "hashRF: time spent in first/second runPar and total: "
               ++show (diffUTCTime t1 t0, diffUTCTime t2 t1, diffUTCTime t2 t0)
     return res
@@ -302,7 +301,8 @@ hashRF num_taxa trees = do
       F.traverse_ fn bips
 
     -- Second, ingest the table to construct the distance matrix:
-    ingest :: IM.IMap DenseLabelSet Frzn (IS.ISet Frzn Int) -> PIO.ParIO DistanceMatrix2
+    ingest :: HasIO e => 
+              IM.IMap DenseLabelSet Frzn (IS.ISet Frzn Int) -> Par e s DistanceMatrix2
     ingest bipTable = theST
       where
        theST = do 
@@ -350,8 +350,6 @@ hashRF num_taxa trees = do
           liftIO$ fn $ IS.fromISet (snd$ M.elemAt ix bipTable)
 #else
 -- TODO: Restore parallelism ^^:
---        let fn2 () x = (liftIO (fn x)) :: PIO.ParIO () 
---        IM.foldWithKeyM fn2 () bipTable
         liftIO$ F.traverse_ (fn . IS.fromISet) bipTable
 #endif
 
