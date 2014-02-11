@@ -63,6 +63,7 @@ import           Data.LVar.SLMap as IM
 #endif
 
 import           Data.LVar.NatArray as NA
+import           Data.LVar.Counter (newSum, incrSum, freezeSum)
 
 import           Bio.Phylogeny.PhyBin.CoreTypes
 -- import           Data.BitList
@@ -262,12 +263,13 @@ type TreeID = AnnotatedTree
 -- type DistanceMat s = NA.NatArray s Word32
 -- Except... bump isn't supported by our idempotent impl.
 
-type DistanceMatrix2 = V.Vector (SV.Vector Int)
+type DistanceMatrix1 = V.Vector (SV.Vector Int)
+type DistanceMatrix2 s = V.Vector (SV.Vector (Sum s))
 
 -- | This version slices the problem a different way.  A single pass over the trees
 -- populates the table of bipartitions.  Then the table can be processed (locally) to
 -- produce (non-localized) increments to a distance matrix.
-hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix2
+hashRF :: forall dec . Int -> [NewickTree dec] -> IO DistanceMatrix1
 hashRF num_taxa trees = do
     t0  <- getCurrentTime
     bigtable <- getBigtable
@@ -301,8 +303,8 @@ hashRF num_taxa trees = do
       F.traverse_ fn bips
 
     -- Second, ingest the table to construct the distance matrix:
-    ingest :: HasIO e => 
-              IM.IMap DenseLabelSet Frzn (IS.ISet Frzn Int) -> Par e s DistanceMatrix2
+    ingest :: (HasBump e, HasIO e) =>
+              IM.IMap DenseLabelSet Frzn (IS.ISet Frzn Int) -> Par e s (DistanceMatrix2 s)
     ingest bipTable = theST
       where
        theST = do 
@@ -319,12 +321,7 @@ hashRF num_taxa trees = do
                          | otherwise = incr j i
             incr i j = do -- Not concurrency safe yet:
                           row <- MV.read matr i
-#if 0                            
-                          elm <- MU.read row j
-                          MU.write row j (elm+1)
-#else
                           incrStorable row j
-#endif                          
                           return ()
             fn :: S.Set Int -> IO ()
             fn bipMembs =
