@@ -1,4 +1,4 @@
-# language: haskell
+language: haskell
 
 sudo: false
 cache:
@@ -6,7 +6,6 @@ cache:
   - $HOME/.stack/
 
 before_install:
-- travis_retry apt-get install libgmp-dev
 - mkdir -p ~/.local/bin
 - export PATH=~/.local/bin:$PATH
 - travis_retry curl -L https://github.com/commercialhaskell/stack/releases/download/v0.1.1.0/stack-0.1.1.0-x86_64-linux.gz | gunzip > ~/.local/bin/stack

@@ -1,8 +1,10 @@
-% PhyBin (0.3): Binning/Clustering Newick Trees by Topology
+# PhyBin (0.3): Binning/Clustering Newick Trees by Topology
+
+[![Build Status](https://travis-ci.org/rrnewton/PhyBin.svg?branch=master)](https://travis-ci.org/rrnewton/PhyBin)
 
 
 PhyBin is a simple command line tool that classifies a set of
-  [Newick tree files](http://en.wikipedia.org/wiki/Newick_format) 
+  [Newick tree files](http://en.wikipedia.org/wiki/Newick_format)
 by their topology.  The purpose of it is to take a large set of tree
 files and browse through the most common tree topologies.
 
@@ -16,17 +18,17 @@ Change Log
 In version 0.2, PhyBin was extended to do clustering as well as binning:
 
  * Computee full all-to-all Robinson-Foulds distance matrices (quickly)
- * Hierarchical clustering of all trees into a tree-of-trees dendrogram based on 
+ * Hierarchical clustering of all trees into a tree-of-trees dendrogram based on
    Robinson Foulds symmetric (tree edit) distance.
 
 In version 0.3, PhyBin gained a number of new features
 
- * A `--tolerant` mode for computing RF distance matrices even for trees missing taxa. 
+ * A `--tolerant` mode for computing RF distance matrices even for trees missing taxa.
  * A `--prune` option for "zooming in" on a specific set of taxa.
  * The `--minboostrap` option was added.
 
 
-Invoking PhyBin 
+Invoking PhyBin
 ===============
 
 PhyBin is a command-line program that produces output in the form of
@@ -54,7 +56,7 @@ The source code to PhyBin can be downloaded here:
 
   * [Download Source from Hackage](http://hackage.haskell.org/package/phybin)
 
-PhyBin is written in Haskell and if you have 
+PhyBin is written in Haskell and if you have
   [Haskell Platform](http://hackage.haskell.org/platform/).
 installed you can install phybin with this one-liner:
 
@@ -63,10 +65,10 @@ installed you can install phybin with this one-liner:
 Otherwise PhyBin is also available for download as a statically-linked
 executable for Mac-OS, Linux, and Windows:
 
-  * [Download Mac-OS Binary](phybin-0.3.mac) 
+  * [Download Mac-OS Binary](phybin-0.3.mac)
   * [Download Linux Binary](phybin-0.3.x86_64_linux)
   * [Download Windows Binary](phybin-0.3_windows.exe)
-  
+
 
 
 Command-line Options
@@ -158,9 +160,7 @@ Authors: Irene and Ryan Newton
 
 Contact email: `irnewton` and `rrnewton` at `indiana` `edu` (with "at" and "dot" inserted).
 
-[Irene's](http://www.bio.indiana.edu/faculty/directory/profile.php?person=irnewton) and 
+[Irene's](http://www.bio.indiana.edu/faculty/directory/profile.php?person=irnewton) and
 [Ryan](http://www.cs.indiana.edu/~rrnewton/homepage.html) homepages.
 
 .
-
-
