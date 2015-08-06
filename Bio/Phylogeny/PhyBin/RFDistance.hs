@@ -12,9 +12,9 @@ module Bio.Phylogeny.PhyBin.RFDistance
          -- * ADT for dense sets
          mkSingleDense, mkEmptyDense, bipSize,
          denseUnions, denseDiff, invertDense, markLabel,
-         
+
         -- * Methods for computing distance matrices
-        naiveDistMatrix, hashRF, 
+        naiveDistMatrix, hashRF,
 
         -- * Output
         printDistMat)
@@ -22,6 +22,7 @@ module Bio.Phylogeny.PhyBin.RFDistance
 
 import           Control.Monad
 import           Control.Monad.ST
+import           Control.Monad.ST.Unsafe (unsafeIOToST)
 import           Data.Function       (on)
 import           Data.Word
 import qualified Data.Vector                 as V
@@ -72,21 +73,21 @@ import qualified Data.Bit                    as B
 
 -- | Dense sets of taxa, aka Bipartitions or BiPs
 --   We assume that taxa labels have been mapped onto a dense, contiguous range of integers [0,N).
--- 
+--
 --   NORMALIZATION Rule: Bipartitions are really two disjoint sets.  But as long as
 --   the parent set (the union of the partitions, aka "all taxa") then a bipartition
 --   can be represented just by *one* subset.  Yet we must choose WHICH subset for
 --   consistency.  We use the rule that we always choose the SMALLER.  Thus the
 --   DenseLabelSet should always be half the size or less, compared to the total
 --   number of taxa.
--- 
+--
 --   A set that is more than a majority of the taxa can be normalized by "flipping",
 --   i.e. taking the taxa that are NOT in that set.
 #ifdef BITVEC_BIPS
 
 #  if 1
 type DenseLabelSet = UB.Vector B.Bit
-markLabel lab = UB.modify (\vec -> MU.write vec lab (B.fromBool True)) 
+markLabel lab = UB.modify (\vec -> MU.write vec lab (B.fromBool True))
 mkEmptyDense  size = UB.replicate size (B.fromBool False)
 mkSingleDense size ind = markLabel ind (mkEmptyDense size)
 denseUnions        = UB.unions
@@ -113,10 +114,10 @@ markLabel lab (DLS _ vec)= DLS (UB.modify (\vec -> return (MU.write vec lab (B.f
 
 #else
 type DenseLabelSet = SI.IntSet
-markLabel lab set   = SI.insert lab set 
+markLabel lab set   = SI.insert lab set
 mkEmptyDense _size  = SI.empty
 mkSingleDense _size = SI.singleton
-denseUnions _size   = SI.unions 
+denseUnions _size   = SI.unions
 bipSize             = SI.size
 denseDiff           = SI.difference
 denseIsSubset       = SI.isSubsetOf
@@ -165,14 +166,14 @@ type DistanceMatrix = V.Vector (U.Vector Int)
 --   Other scoring methods may be added in the future.  (For example, penalizing for
 --   missing taxa.)
 naiveDistMatrix :: [NewickTree DefDecor] -> (DistanceMatrix, V.Vector (S.Set DenseLabelSet))
-naiveDistMatrix lst = 
+naiveDistMatrix lst =
    let sz = P.length lst
        treeVect  = V.fromList lst
        labelSets = V.map treeLabels treeVect
        eachbips  = V.map allBips    treeVect
-       mat = V.generate sz $ \ i ->        
+       mat = V.generate sz $ \ i ->
              U.generate i  $ \ j ->
-             let 
+             let
                  inI = (labelSets V.! i)
                  inJ = (labelSets V.! j)
                  inBoth = S.intersection inI inJ
@@ -180,7 +181,7 @@ naiveDistMatrix lst =
                  -- Match will always succeed due to size==0 test below:
                  Just prI = pruneTreeLeaves inBoth (treeVect V.! i)
                  Just prJ = pruneTreeLeaves inBoth (treeVect V.! j)
-                   
+
                  -- Memoization: If we are using it at its full size we can use the cached one:
                  bipsI = if S.size inBoth == S.size inI
                          then (eachbips V.! i)
@@ -206,14 +207,14 @@ naiveDistMatrix lst =
 labelBips :: NewickTree a -> NewickTree (a, [DenseLabelSet])
 labelBips tr =
 --    trace ("labelbips "++show allLeaves++" "++show size) $
-#ifdef NORMALIZATION  
+#ifdef NORMALIZATION
     fmap (\(a,ls) -> (a,map (normBip size) ls)) $
 #endif
     loop tr
-  where    
+  where
     size = numLeaves tr
     zero = mkEmptyDense size
-    loop (NTLeaf dec lab) = NTLeaf (dec, [markLabel lab zero]) lab      
+    loop (NTLeaf dec lab) = NTLeaf (dec, [markLabel lab zero]) lab
     loop (NTInterior dec chlds) =
       let chlds' = map loop chlds
           sets   = map (denseUnions size . snd . get_dec) chlds' in
@@ -225,23 +226,23 @@ labelBips tr =
 
 -- normBip :: DenseLabelSet -> DenseLabelSet -> DenseLabelSet
 --    normBip allLeaves bip =
-normBip :: Int -> DenseLabelSet -> DenseLabelSet    
+normBip :: Int -> DenseLabelSet -> DenseLabelSet
 normBip totsize bip =
   let -- size     = bipSize allLeaves
       halfSize = totsize `quot` 2
 --      flipped  = denseDiff allLeaves bip
-      flipped  = invertDense totsize bip 
-  in 
+      flipped  = invertDense totsize bip
+  in
   case compare (bipSize bip) halfSize of
-    LT -> bip 
+    LT -> bip
     GT -> flipped -- Flip it
     EQ -> min bip flipped -- This is a painful case, we need a tie-breaker
-    
+
 
 foldBips :: Monoid m => (DenseLabelSet -> m) -> NewickTree a -> m
 foldBips f tr = F.foldMap f' (labelBips tr)
  where f' (_,bips) = F.foldMap f bips
-  
+
 -- | Get all non-singleton BiPs implied by a tree.
 allBips :: NewickTree a -> S.Set DenseLabelSet
 allBips tr = S.filter ((> 1) . bipSize) $ foldBips S.insert tr S.empty
@@ -292,7 +293,7 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
           fn acc bip = M.alter fn2 bip acc
           fn2 (Just membs) = Just (markLabel ix membs)
           fn2 Nothing      = Just (mkSingleDense num_taxa ix)
-      in      
+      in
       build acc' tl
 
     -- Second, ingest the table to construct the distance matrix:
@@ -300,12 +301,12 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
     ingest bipTable = runST theST
       where
        theST :: forall s0 . ST s0 DistanceMatrix
-       theST = do 
+       theST = do
         -- Triangular matrix, starting narrow and widening:
         matr <- MV.new num_trees
-        -- Too bad MV.replicateM is insufficient.  It should pass index.  
+        -- Too bad MV.replicateM is insufficient.  It should pass index.
         -- Instead we write this C-style:
-        for_ (0,num_trees) $ \ ix -> do 
+        for_ (0,num_trees) $ \ ix -> do
           row <- MU.replicate ix (0::Int)
           MV.write matr ix row
           return ()
@@ -333,7 +334,7 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
                   fn1 trId = traverseDense_ (fn2 trId) dontHave
                   fn2 trId1 trId2 = bumpMatr trId1 trId2
               in
---                 trace ("Computed donthave "++ show dontHave) $ 
+--                 trace ("Computed donthave "++ show dontHave) $
                  traverseDense_ fn1 haveIt
         F.traverse_ fn bipTable
         v1 <- V.unsafeFreeze matr
@@ -346,17 +347,17 @@ hashRF num_taxa trees = build M.empty (zip [0..] trees)
 
 instance Pretty a => Pretty (S.Set a) where
  pPrint s = pPrint (S.toList s)
- 
 
-printDistMat :: Handle -> V.Vector (U.Vector Int) -> IO () 
+
+printDistMat :: Handle -> V.Vector (U.Vector Int) -> IO ()
 printDistMat h mat = do
   hPutStrLn h "Robinson-Foulds distance (matrix format):"
   hPutStrLn h "-----------------------------------------"
-  V.forM_ mat $ \row -> do 
+  V.forM_ mat $ \row -> do
     U.forM_ row $ \elem -> do
       hPutStr h (show elem)
       hPutStr h " "
-    hPutStr h "0\n"          
+    hPutStr h "0\n"
   hPutStrLn h "-----------------------------------------"
 
 -- My own forM for numeric ranges (not requiring deforestation optimizations).
@@ -378,13 +379,13 @@ filterCompatible consensus trees =
 
 -- | `compatibleWith consensus tree` -- Is a tree compatible with a consensus?
 --   This is more efficient if partially applied then used repeatedly.
--- 
+--
 -- Note, tree compatibility is not the same as an exact match.  It's
 -- like (<=) rather than (==).  The "star topology" is consistent with the
--- all trees, because it induces the empty set of bipartitions.  
+-- all trees, because it induces the empty set of bipartitions.
 compatibleWith :: NewickTree a -> NewickTree b -> Bool
 compatibleWith consensus =
-  let consBips = allBips consensus in 
+  let consBips = allBips consensus in
   \ newTr -> S.isSubsetOf consBips (allBips newTr)
 
 -- | Consensus between two trees, which may even have different label maps.
@@ -402,12 +403,12 @@ consensusTree num_taxa (hd:tl) = bipsToTree num_taxa intersection
 --     loop !remain []      = remain
 --     -- Was attempting to use foldBips here as an optimization:
 -- --     loop !remain (hd:tl) = loop (foldBips S.delete hd remain) tl
---     loop !remain (hd:tl) = loop (S.difference remain (allBips hd)) tl    
-      
+--     loop !remain (hd:tl) = loop (S.difference remain (allBips hd)) tl
+
 -- | Convert from bipartitions BACK to a single tree.
 bipsToTree :: Int -> S.Set DenseLabelSet -> NewickTree ()
 bipsToTree num_taxa origbip =
---  trace ("Doing bips in order: "++show sorted++"\n") $ 
+--  trace ("Doing bips in order: "++show sorted++"\n") $
   loop lvl0 sorted
   where
     -- We consider each subset in increasing size order.
@@ -420,7 +421,7 @@ bipsToTree num_taxa origbip =
     -- VERY expensive!  However, due to normalization issues this is necessary for now:
     -- TODO: in the future make it possible to definitively denormalize.
     -- isMatch bip x = denseIsSubset x bip || denseIsSubset x (invertDense num_taxa bip)
-    isMatch bip x = denseIsSubset x bip 
+    isMatch bip x = denseIsSubset x bip
 
     -- We recursively glom together subtrees until we have a complete tree.
     -- We only process larger subtrees after we have processed all the smaller ones.
@@ -430,15 +431,14 @@ bipsToTree num_taxa origbip =
         [(_,one)] -> one
         lst   -> NTInterior () (map snd lst)
     loop !subtrees (bip:tl) =
---      trace (" -> looping, subtrees "++show subtrees) $ 
+--      trace (" -> looping, subtrees "++show subtrees) $
       let (in_,out) = L.partition (isMatch bip. fst) subtrees in
       case in_ of
         [] -> error $"bipsToTree: Internal error!  No match for bip: "++show bip
               ++" out is\n "++show out++"\n and remaining bips "++show (length tl)
               ++"\n when processing orig bip set:\n  "++show origbip
           -- loop out tl
-        _ -> 
+        _ ->
          -- Here all subtrees that match the current bip get merged:
          loop ((denseUnions num_taxa (map fst in_),
                 NTInterior ()        (map snd in_)) : out) tl
-

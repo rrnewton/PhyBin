@@ -1,0 +1,10 @@
+
+flags: {}
+
+packages:
+ - .
+
+extra-deps:
+ - hierarchical-clustering-0.4.6
+
+resolver: lts-2.21

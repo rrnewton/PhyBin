@@ -7,14 +7,14 @@
 module Bio.Phylogeny.PhyBin.CoreTypes
        (
          -- * Tree and tree decoration types
-         NewickTree(..), 
+         NewickTree(..),
          DefDecor, StandardDecor(..), AnnotatedTree, FullTree(..),
          ClustMode(..), TreeName, NumTaxa(..),
-         
+
          -- * Tree operations
-         displayDefaultTree, displayStrippedTree, 
+         displayDefaultTree, displayStrippedTree,
          treeSize, numLeaves, liftFT,
-         get_dec, set_dec, get_children, 
+         get_dec, set_dec, get_children,
          map_labels, all_labels, foldIsomorphicTrees,
 
          -- * Utilities specific to StandardDecor:
@@ -26,7 +26,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
 
          -- * General helpers
          Label, LabelTable,
-         
+
          -- * Experimenting with abstracting decoration operations
          HasBranchLen(..)
        )
@@ -34,7 +34,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
 
 import Control.DeepSeq   (NFData(..))
 import qualified Data.Map as M
-import qualified Data.Set as S
+--import qualified Data.Set as S
 import Data.Foldable (Foldable(..))
 import Data.Maybe (maybeToList)
 import Data.Monoid (mappend, mconcat)
@@ -58,7 +58,7 @@ type BranchLen = Double
 --
 --   Note that these trees are rooted.  The `normalize` function ensures that a
 --   single, canonical rooted representation is chosen.
-data NewickTree a = 
+data NewickTree a =
    NTLeaf     a {-# UNPACK #-} !Label
  | NTInterior a  [NewickTree a]
  deriving (Show, Eq, Ord)
@@ -66,7 +66,7 @@ data NewickTree a =
 instance NFData a => NFData (NewickTree a) where
   rnf (NTLeaf a _) = rnf a
   rnf (NTInterior nd ls) = rnf nd `seq` rnf ls
-  
+
 -- TODO: Ordering maybe shouldn't need to touch the metadata.  At least on the fast
 -- path.
 
@@ -76,8 +76,8 @@ instance NFData Atom where
   rnf a = rnf (fromAtom a :: Int)
 -}
 
-instance Functor NewickTree where 
-   fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x 
+instance Functor NewickTree where
+   fmap fn (NTLeaf dec x)      = NTLeaf (fn dec) x
    fmap fn (NTInterior dec ls) = NTInterior (fn dec) (map (fmap fn) ls)
 
 instance Foldable NewickTree where
@@ -91,14 +91,14 @@ instance Foldable FullTree where
 instance Functor FullTree where
   fmap f (FullTree n l tr) = FullTree n l $ fmap f tr
 
-instance Pretty dec => Pretty (NewickTree dec) where 
+instance Pretty dec => Pretty (NewickTree dec) where
  -- I'm using displayDefaultTree for the "prettiest" printing and
  -- replacing pPrint with a whitespace-improved version of show:
  pPrint (NTLeaf dec name)   = "NTLeaf"     <+> pPrint dec <+> text (show name)
  pPrint (NTInterior dec ls) = "NTInterior" <+> pPrint dec <+> pPrint ls
 
 instance Pretty a => Pretty (FullTree a) where
-  pPrint (FullTree name mp tr) = 
+  pPrint (FullTree name mp tr) =
     "FullTree " <+> text name <+> loop tr
    where
     loop (NTLeaf dec ind)    = "NTLeaf"     <+> pPrint dec <+> text (mp M.! ind)
@@ -115,7 +115,7 @@ displayDefaultTree orig = loop tr <> ";"
     (FullTree _ mp tr) = orig -- normalize orig
     loop (NTLeaf (Nothing,_) name)     = text (mp M.! name)
     loop (NTLeaf _ _)                  = error "WEIRD -- why did a leaf node have a bootstrap value?"
-    loop (NTInterior (bootstrap,_) ls) = 
+    loop (NTInterior (bootstrap,_) ls) =
        case bootstrap of
          Nothing -> base
          Just val -> base <> text ":[" <> text (show val) <> text "]"
@@ -154,10 +154,10 @@ type AnnotatedTree = NewickTree StandardDecor
 
 -- | The standard decoration includes everything in `DefDecor` plus
 --   some extra cached data:
--- 
+--
 --  (1) branch length from parent to "this" node
 --  (2) bootstrap values for the node
--- 
+--
 --  (3) subtree weights for future use
 --      (defined as number of LEAVES, not counting intermediate nodes)
 --  (4) sorted lists of labels for symmetry breaking
@@ -188,7 +188,7 @@ instance HasBranchLen DefDecor where
 data FullTree a =
   FullTree { treename   :: TreeName
            , labelTable :: LabelTable
-           , nwtree     :: NewickTree a 
+           , nwtree     :: NewickTree a
            }
  deriving (Show, Ord, Eq)
 
@@ -205,7 +205,7 @@ liftFT fn (FullTree nm labs x) = FullTree nm labs (fn x)
 
 type TreeName = String
 
-instance Pretty StandardDecor where 
+instance Pretty StandardDecor where
  pPrint (StandardDecor bl bs wt ls) = parens$
     "StandardDecor" <+> hsep [pPrint bl, pPrint bs
 --                             , pPrint wt, pPrint ls
@@ -217,7 +217,7 @@ instance Pretty StandardDecor where
 ----------------------------------------------------------------------------------------------------
 
 -- | Due to the number of configuration options for the driver, we pack them into a record.
-data PhyBinConfig = 
+data PhyBinConfig =
   PBC { verbose :: Bool
       , num_taxa :: NumTaxa
       , name_hack :: String -> String
@@ -235,11 +235,11 @@ data PhyBinConfig =
       , dist_thresh :: Maybe Int
       , branch_collapse_thresh :: Maybe Double -- ^ Branches less than this length are collapsed.
       , bootstrap_collapse_thresh :: Maybe Int
-        -- ^ BootStrap values less than this result in the intermediate node being collapsed.        
+        -- ^ BootStrap values less than this result in the intermediate node being collapsed.
       }
 
 -- | Supported modes for computing RFDistance.
-data WhichRFMode = HashRF | TolerantNaive  
+data WhichRFMode = HashRF | TolerantNaive
   deriving (Show, Eq, Ord)
 
 -- | How many taxa should we expect in the incoming dataset?
@@ -248,10 +248,10 @@ data NumTaxa = Expected Int  -- ^ Supplied by the user.  Committed.
              | Variable      -- ^ Explicitly ignore this setting in favor of comparing all trees
                              --   (even if some are missing taxa).  This only works with certain modes.
   deriving (Show, Read, Eq)
-               
+
 -- | The default phybin configuration.
 default_phybin_config :: PhyBinConfig
-default_phybin_config = 
+default_phybin_config =
  PBC { verbose = False
 --      , num_taxa = error "must be able to determine the number of taxa expected in the dataset.  (Supply it manually with -n.)"
       , num_taxa  = Unknown
@@ -320,7 +320,7 @@ avg_branchlen origls = fst total / snd total
    sum_ls ls = (sum$ map fst ls, sum$ map snd ls)
    sum_tree (NTLeaf dec _) | getBranchLen dec == 0  = (0,0)
                            | otherwise              = (abs (getBranchLen dec),1)
-   sum_tree (NTInterior dec ls) = 
+   sum_tree (NTInterior dec ls) =
        let branchLen = getBranchLen dec
            (x,y)     = sum_ls$ map sum_tree ls in
        if branchLen == 0 then (x, y) else ((abs branchLen) + x, 1+y)
@@ -335,7 +335,7 @@ get_bootstraps (NTInterior (StandardDecor{bootStrap}) ls) =
 map_labels :: (Label -> Label) -> NewickTree a -> NewickTree a
 map_labels fn (NTLeaf     dec lbl) = NTLeaf dec $ fn lbl
 map_labels fn (NTInterior dec ls)  = NTInterior dec$ map (map_labels fn) ls
- 
+
 -- | Return all the labels contained in the tree.
 all_labels :: NewickTree t -> [Label]
 all_labels (NTLeaf     _ lbl) = [lbl]
@@ -365,4 +365,3 @@ foldIsomorphicTrees fn ls@(hd:_) = fmap fn horiztrees
     (NTInterior dec ls1, NTInterior decls ls2) ->
      NTInterior (dec:decls) $ zipWith consTrees ls1 ls2
     _ -> error "foldIsomorphicTrees: difference in tree shapes"
-

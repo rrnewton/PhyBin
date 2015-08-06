@@ -1,5 +1,5 @@
 Name:           phybin
-Version:        0.3
+Version:        0.3.0.1
 License: BSD3
 License-file:   LICENSE
 Stability: Beta
@@ -9,7 +9,7 @@ Maintainer:		Ryan Newton <rrnewton@gmail.com>
 
 -- Version history:
 -- 0.1.2   -- first significant release
--- 0.1.2.1 -- 
+-- 0.1.2.1 --
 -- 0.1.2.4 -- new release, several new features
 -- 0.1.2.5 -- bump for graphviz API changes
 -- 0.2 -- Add Robinson-Foulds distance, use Int labels.
@@ -29,10 +29,10 @@ homepage: http://www.cs.indiana.edu/~rrnewton/projects/phybin/
 
 Copyright: Copyright (c) 2010 Ryan Newton
 Synopsis: Utility for clustering phylogenetic trees in Newick format based on Robinson-Foulds distance.
-Description: 
+Description:
    This package provides a libary and executable for dealing with Newick tree files.
    .
-   It can do simple binning of identical trees or more complex clustering based on 
+   It can do simple binning of identical trees or more complex clustering based on
    an all-to-all Robinson-Foulds distance matrix.
    .
    phybin produces output files that characterize the size and contents of each bin or cluster (including
@@ -64,26 +64,26 @@ Flag sequential
 Library
   Exposed-modules:   Bio.Phylogeny.PhyBin
                      Bio.Phylogeny.PhyBin.Binning
-                     Bio.Phylogeny.PhyBin.CoreTypes                     
+                     Bio.Phylogeny.PhyBin.CoreTypes
                      Bio.Phylogeny.PhyBin.Parser
                      Bio.Phylogeny.PhyBin.PreProcessor
-                     Bio.Phylogeny.PhyBin.RFDistance  
+                     Bio.Phylogeny.PhyBin.RFDistance
                      Bio.Phylogeny.PhyBin.Util
                      Bio.Phylogeny.PhyBin.Visualize
   -- Data.BitList
-  Build-Depends:     base >= 3 && < 5, directory, process, containers, 
+  Build-Depends:     base >= 3 && < 5, directory, process, containers,
                      async, time,
-                     filepath, 
-                     graphviz >= 2999.16, 
-                     text >= 0.11 && < 0.12,
+                     filepath,
+                     graphviz >= 2999.16,
+                     text >= 0.11,
                      prettyclass, fgl,
-                     HUnit, bytestring, 
+                     HUnit, bytestring,
                      -- For bytestring.lazy support:
-                     parsec >= 3.1.0, 
+                     parsec >= 3.1.0,
                      vector >= 0.10,
                      deepseq,
                      hierarchical-clustering >= 0.4, split >= 0.2
---                     lattice-par, 
+--                     lattice-par,
   GHC-Options: -O2 -funbox-strict-fields -rtsopts
 
   if flag(hashrf)
@@ -98,19 +98,19 @@ Executable phybin
   Main-is:           Main.hs
   Build-Depends:     phybin
   -- DUPLICATE:
-  Build-Depends:     base >= 3 && < 5, directory, process, containers, 
+  Build-Depends:     base >= 3 && < 5, directory, process, containers,
                      async, time,
-                     filepath, 
-                     graphviz >= 2999.16, 
-                     text >= 0.11 && < 0.12,
+                     filepath,
+                     graphviz >= 2999.16,
+                     text >= 0.11,
                      prettyclass, fgl,
-                     HUnit, bytestring, 
+                     HUnit, bytestring,
                      -- For bytestring.lazy support:
-                     parsec >= 3.1.0, 
+                     parsec >= 3.1.0,
                      vector >= 0.10,
                      deepseq,
                      hierarchical-clustering >= 0.4, split >= 0.2
---                     lattice-par, 
+--                     lattice-par,
   GHC-Options: -O2 -funbox-strict-fields -rtsopts -threaded
 
   if flag(hashrf)
@@ -127,14 +127,14 @@ Test-Suite test-phybin
   Main-is:           TestAll.hs
   Type:              exitcode-stdio-1.0
 --  Build-Depends:     phybin
-  Build-Depends:     base >= 3 && < 5, directory, process, containers, 
+  Build-Depends:     base >= 3 && < 5, directory, process, containers,
                      async, time,
-                     filepath, 
-                     graphviz >= 2999.16, 
-                     text >= 0.11 && < 0.12,
+                     filepath,
+                     graphviz >= 2999.16,
+                     text >= 0.11,
                      prettyclass, fgl,
-                     HUnit, bytestring, 
-                     parsec >= 3.1.0, 
+                     HUnit, bytestring,
+                     parsec >= 3.1.0,
                      vector >= 0.10,
                      deepseq,
                      hierarchical-clustering >= 0.4, split >= 0.2
@@ -149,4 +149,3 @@ Test-Suite test-phybin
      Build-Depends:  bitvec >= 0.1
   if flag(sequential)
      CPP-Options: -DSEQUENTIALIZE
-
