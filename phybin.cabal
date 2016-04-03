@@ -62,6 +62,7 @@ Flag sequential
   default: False
 
 Library
+  hs-source-dirs:  ./src
   Exposed-modules:   Bio.Phylogeny.PhyBin
                      Bio.Phylogeny.PhyBin.Binning
                      Bio.Phylogeny.PhyBin.CoreTypes
