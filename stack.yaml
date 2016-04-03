@@ -1,4 +1,5 @@
 
+
 flags: {}
 
 packages:
@@ -7,4 +8,4 @@ packages:
 extra-deps:
  - hierarchical-clustering-0.4.6
 
-resolver: lts-2.21
+resolver: lts-5.11
