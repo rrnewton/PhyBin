@@ -35,9 +35,9 @@ module Bio.Phylogeny.PhyBin.CoreTypes
 import Control.DeepSeq   (NFData(..))
 import qualified Data.Map as M
 --import qualified Data.Set as S
-import Data.Foldable (Foldable(..))
+-- import Data.Foldable (Foldable(..))
 import Data.Maybe (maybeToList)
-import Data.Monoid (mappend, mconcat)
+-- import Data.Monoid (mappend, mconcat)
 import Text.PrettyPrint.HughesPJClass hiding (char, Style)
 
 import qualified Data.Clustering.Hierarchical as C
