@@ -127,7 +127,7 @@ Executable phybin
 Test-Suite test-phybin
   Main-is:           TestAll.hs
   Type:              exitcode-stdio-1.0
---  Build-Depends:     phybin
+  Build-Depends:     phybin
   Build-Depends:     base >= 3 && < 5, directory, process, containers,
                      async, time,
                      filepath,

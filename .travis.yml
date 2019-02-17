@@ -13,6 +13,7 @@ before_install:
 - cat /proc/cpuinfo | grep name
 
 install:
+  - stack ghc -- --version
   - stack --no-terminal --install-ghc test --only-dependencies 
 
 script:
