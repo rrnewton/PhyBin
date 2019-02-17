@@ -32,6 +32,7 @@ module Bio.Phylogeny.PhyBin.CoreTypes
        )
        where
 
+import Prelude hiding ((<>))
 import Control.DeepSeq   (NFData(..))
 import qualified Data.Map as M
 --import qualified Data.Set as S

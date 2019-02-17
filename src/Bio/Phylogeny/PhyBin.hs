@@ -31,6 +31,7 @@ import           Control.DeepSeq     (deepseq, NFData(..))
 import           Control.Exception   (evaluate)
 import           Control.Applicative ((<$>),(<*>))
 import           Control.Concurrent  (Chan)
+import           Prelude hiding ((<>))
 import           System.FilePath     (combine)
 import           System.Directory    (doesFileExist, doesDirectoryExist, createDirectoryIfMissing,
                                       getDirectoryContents, getCurrentDirectory)
