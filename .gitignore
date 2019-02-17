@@ -1,3 +1,10 @@
 Rickettsia
 Rickettsiales
-Wolbachianot_tracked/
+Wolbachia
+.cabal-sandbox
+.stack-work
+not_tracked
+.git
+.travis.yml
+old
+*.exe
