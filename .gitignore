@@ -1,10 +1,12 @@
-Rickettsia
-Rickettsiales
 Wolbachia
 .cabal-sandbox
 .stack-work
-not_tracked
 .git
 .travis.yml
-old
 *.exe
+.#*
+.DS_Store
+.Rhistory
+datasets
+out1
+not_tracked*

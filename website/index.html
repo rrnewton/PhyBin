@@ -1,0 +1,141 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title>PhyBin (0.3): Binning/Clustering Newick Trees by Topology</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="website.css" type="text/css" />
+</head>
+<body>
+<div id="header">
+<h1 class="title">PhyBin (0.3): Binning/Clustering Newick Trees by Topology</h1>
+</div>
+<div id="TOC">
+<ul>
+<li><a href="#change-log">Change Log</a></li>
+<li><a href="#invoking-phybin">Invoking PhyBin</a></li>
+<li><a href="#downloading-and-installing-phybin">Downloading and Installing PhyBin</a></li>
+<li><a href="#command-line-options">Command-line Options</a></li>
+</ul>
+</div>
+<p>PhyBin is a simple command line tool that classifies a set of <a href="http://en.wikipedia.org/wiki/Newick_format">Newick tree files</a> by their topology. The purpose of it is to take a large set of tree files and browse through the most common tree topologies.</p>
+<div class="figure">
+<img src="trees.jpg" alt="(Above figure) Trees corresponding to the three largest bins resulting from a phybin run. The file binXX_YYY, where XX is the rank of the bin and YYY is the number of trees having that topology." /><p class="caption">(Above figure) Trees corresponding to the three largest bins resulting from a phybin run. The file <code>binXX_YYY</code>, where <code>XX</code> is the rank of the bin and <code>YYY</code> is the number of trees having that topology.</p>
+</div>
+<h1 id="change-log"><a href="#change-log">Change Log</a></h1>
+<p>In version 0.2, PhyBin was extended to do clustering as well as binning:</p>
+<ul>
+<li>Computee full all-to-all Robinson-Foulds distance matrices (quickly)</li>
+<li>Hierarchical clustering of all trees into a tree-of-trees dendrogram based on Robinson Foulds symmetric (tree edit) distance.</li>
+</ul>
+<p>In version 0.3, PhyBin gained a number of new features</p>
+<ul>
+<li>A <code>--tolerant</code> mode for computing RF distance matrices even for trees missing taxa.</li>
+<li>A <code>--prune</code> option for “zooming in” on a specific set of taxa.</li>
+<li>The <code>--minboostrap</code> option was added.</li>
+</ul>
+<h1 id="invoking-phybin"><a href="#invoking-phybin">Invoking PhyBin</a></h1>
+<p>PhyBin is a command-line program that produces output in the form of text files and pdfs, but to produce pdfs (to visualize trees) the <a href="http://www.graphviz.org/">GraphViz program</a>, including the <code>dot</code> command, must be installed on the machine.</p>
+<p>The following is a simple invocation of PhyBin:</p>
+<pre><code>phybin --bin *.tree -o output_dir/</code></pre>
+<p>The input trees can be specified directly on the command-line, or, if the name of a directory is provided instead, all contained files are assumed to be trees in Newick format.</p>
+<p>PhyBin, at minimum, produces files of the form <code>output_dir/clusterXX_YY.tr</code>, one for each bin. If requested, it will also produce visual representations of each bin in the form <code>output_dir/clusterXX_YY.pdf</code>.</p>
+<h1 id="downloading-and-installing-phybin"><a href="#downloading-and-installing-phybin">Downloading and Installing PhyBin</a></h1>
+<p>The source code to PhyBin can be downloaded here:</p>
+<ul>
+<li><a href="http://hackage.haskell.org/package/phybin">Download Source from Hackage</a></li>
+</ul>
+<p>PhyBin is written in Haskell and if you have <a href="http://hackage.haskell.org/platform/">Haskell Platform</a>. installed you can install phybin with this one-liner:</p>
+<pre><code>cabal install phybin</code></pre>
+<p>Otherwise PhyBin is also available for download as a statically-linked executable for Mac-OS, Linux, and Windows:</p>
+<ul>
+<li><a href="phybin-0.3.mac">Download Mac-OS Binary</a></li>
+<li><a href="phybin-0.3.x86_64_linux">Download Linux Binary</a></li>
+<li><a href="phybin-0.3_windows.exe">Download Windows Binary</a></li>
+</ul>
+<h1 id="command-line-options"><a href="#command-line-options">Command-line Options</a></h1>
+<p>In addition to input files and directories, <code>phybin</code> supports a number of command-line options. Run “phybin –help” to see these options. Here is a snapshot of the current help output (version 0.2.11):</p>
+<pre><code>Usage: phybin [OPTION...] files or directories...
+
+PhyBin takes Newick tree files as input.  Paths of Newick files can
+be passed directly on the command line.  Or, if directories are provided,
+all files in those directories will be read.  Taxa are named based on the files
+containing them.  If a file contains multiple trees, all are read by phybin, and
+the taxa name then includes a suffix indicating the position in the file:
+ e.g. FILENAME_0, FILENAME_1, etc.
+
+When clustering trees, Phybin computes a complete all-to-all Robinson-Foulds distance matrix.
+If a threshold distance (tree edit distance) is given, then a flat set of clusters
+will be produced in files clusterXX_YY.tr.  Otherwise it produces a full dendogram (UNFINISHED).
+
+Binning mode provides an especially quick-and-dirty form of clustering.
+When running with the --bin option, only exactly equal trees are put in the same cluster.
+Tree pre-processing still applies, however: for example collapsing short branches.
+
+USAGE NOTES:
+ * Currently phybin ignores input trees with the wrong number of taxa.
+ * If given a directory as input phybin will assume all contained files are Newick trees.
+
+
+Options include:
+
+  -v       --verbose         print WARNINGS and other information (recommended at first)
+  -V       --version         show version number
+  -o DIR   --output=DIR      set directory to contain all output files (default &quot;./phybin_out/&quot;)
+       --selftest        run internal unit tests
+
+             ----------------------------- Clustering Options ------------------------------
+       --bin             Use simple binning, the cheapest form of &#39;clustering&#39;
+       --single          Use single-linkage clustering (nearest neighbor)
+       --complete        Use complete-linkage clustering (furthest neighbor)
+       --UPGMA           Use Unweighted Pair Group Method (average linkage) - DEFAULT mode
+       --editdist=DIST   Combine all clusters separated by DIST or less.  Report a flat list of clusters.
+             Irrespective of whether this is activated, a hierarchical clustering (dendogram.pdf) is produced.
+               Select Robinson-Foulds (symmetric difference) distance algorithm:
+       --simple          use direct all-to-all comparison
+       --hashrf          (default) use a variant of the HashRF algorithm for the distance matrix
+
+             ----------------------------- Visualization --------------------------------
+  -g       --graphbins       use graphviz to produce .dot and .pdf output files
+  -d       --drawbins        like -g, but open GUI windows to show each bin&#39;s tree
+  -w       --view            for convenience, &quot;view mode&quot; simply displays input Newick files without binning
+       --showtrees       Print (textual) tree topology inside the nodes of the dendrogram
+       --highlight=FILE  Highlight nodes in the tree-of-trees (dendrogram) consistent with the.
+             given tree file.  Multiple highlights are permitted and use different colors.
+       --interior        Show the consensus trees for interior nodes in the dendogram, rather than just points.
+
+             ---------------------------- Tree pre-processing -----------------------------
+  -n NUM   --numtaxa=NUM     expect NUM taxa for this dataset
+  -b LEN   --branchcut=LEN   collapse branches less than LEN
+
+             --------------------------- Extracting taxa names ----------------------------
+
+  -p NUM   --nameprefix=NUM  Leaf names in the input Newick trees can be gene names, not taxa.
+             Then it is typical to extract taxa names from genes.  This option extracts
+             a prefix of NUM characters to serve as the taxa name.
+
+  -s STR   --namesep=STR     An alternative to --nameprefix, STR provides a set of delimeter characters,
+             for example &#39;-&#39; or &#39;0123456789&#39;.  The taxa name is then a variable-length
+             prefix of each gene name up to but not including any character in STR.
+
+  -m FILE  --namemap=FILE    Even once prefixes are extracted it may be necessary to use a lookup table
+             to compute taxa names, e.g. if multiple genes/plasmids map onto one taxa.
+             This option specifies a text file with find/replace entries of the form
+             &quot;&lt;string&gt; &lt;taxaname&gt;&quot;, which are applied AFTER -s and -p.
+
+             --------------------------- Utility Modes ----------------------------
+       --rfdist          print a Robinson Foulds distance matrix for the input trees
+       --setdiff         for convenience, print the set difference between cluster*.txt files
+       --print           simply print out a concise form of each input tree
+       --printnorms      simply print out a concise and NORMALIZED form of each input tree
+       --consensus       print a strict consensus tree for the inputs, then exit
+       --matching        print a list of tree names that match any --highlight argument</code></pre>
+<hr />
+<p>Authors: Irene and Ryan Newton</p>
+<p>Contact email: <code>irnewton</code> and <code>rrnewton</code> at <code>indiana</code> <code>edu</code> (with “at” and “dot” inserted).</p>
+<p><a href="http://www.bio.indiana.edu/faculty/directory/profile.php?person=irnewton">Irene’s</a> and <a href="http://www.cs.indiana.edu/~rrnewton/homepage.html">Ryan</a> homepages.</p>
+<p>.</p>
+</body>
+</html>
